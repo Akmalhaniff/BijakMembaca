@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin — Program Bijak Membaca</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <header class="site">
+    <div class="wrap">
+      <div class="emblem">BM</div>
+      <div class="titles">
+        <h1>Panel Admin</h1>
+        <p id="programName">Program Bijak Membaca</p>
+      </div>
+    </div>
+    <nav class="tabs no-print">
+      <a href="index.html">Dashboard</a>
+      <a href="admin.html" class="on">Admin</a>
+    </nav>
+  </header>
+
+  <div id="gate" class="gate">
+    <div class="card">
+      <div class="emblem" style="margin:0 auto">🔐</div>
+      <h2>Kemasukan Admin</h2>
+      <p>Masukkan PIN untuk mengurus data murid.</p>
+      <input type="password" id="pinInput" inputmode="numeric" maxlength="8" placeholder="••••">
+      <div class="err" id="pinErr"></div>
+      <button class="btn" id="pinBtn">Masuk</button>
+      <p style="font-size:12px;color:var(--muted);margin-top:10px">PIN lalai: <b>1122</b> (boleh ditukar dalam Tetapan)</p>
+    </div>
+  </div>
+
+  <main id="adminMain" style="display:none">
+    <div class="wrap">
+
+      <div class="adminbar">
+        <div class="left">
+          <select id="classFilter">
+            <option value="">Semua Kelas</option>
+          </select>
+          <button class="btn no-print" id="addStudentBtn">+ Tambah Murid</button>
+        </div>
+        <div class="left no-print">
+          <button class="btn ghost sm" id="exportBtn">Muat Turun JSON</button>
+          <button class="btn ghost sm" id="importBtn">Muat Naik JSON</button>
+          <input type="file" id="importFile" accept=".json" hidden>
+          <button class="btn ghost sm" id="previewBtn">Lihat Dashboard</button>
+        </div>
+      </div>
+
+      <div id="tableWrap"></div>
+
+      <h2 class="sec no-print">Tetapan Program</h2>
+      <div class="card no-print">
+        <div class="form-grid">
+          <div class="field">
+            <label>Nama Sekolah</label>
+            <input type="text" id="setSchool">
+          </div>
+          <div class="field">
+            <label>Nama Program</label>
+            <input type="text" id="setProgram">
+          </div>
+          <div class="field">
+            <label>Tahun</label>
+            <input type="text" id="setYear">
+          </div>
+          <div class="field">
+            <label>Tukar PIN Admin</label>
+            <input type="text" id="setPin" maxlength="8" placeholder="PIN baru">
+          </div>
+          <div class="field full">
+            <label>Tahap Bacaan (nama setiap tahap)</label>
+            <div id="levelInputs"></div>
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
+          <button class="btn" id="saveSettingsBtn">Simpan Tetapan</button>
+          <button class="btn danger" id="resetBtn">Reset kepada Data Contoh</button>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <div class="modal-bg" id="editModalBg">
+    <div class="modal" style="max-width:820px">
+      <div class="modal-head">
+        <h3 id="editTitle">Edit Murid</h3>
+        <button class="x" data-close="edit">×</button>
+      </div>
+      <div class="modal-body" id="editBody"></div>
+      <div class="modal-foot no-print">
+        <button class="btn danger" id="deleteStudentBtn">Padam Murid</button>
+        <button class="btn ghost" data-close="edit">Tutup</button>
+        <button class="btn" id="saveStudentBtn">Simpan</button>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site">
+    <b>SMK Puncak Alam 3</b> — Panel Admin Program Bijak Membaca
+  </footer>
+
+  <script src="js/sample.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/admin.js"></script>
+</body>
+</html>
