@@ -2,6 +2,18 @@ const DATA_KEY = "sbm_data";
 const PIN_KEY = "sbm_pin";
 const DEFAULT_PIN = "1122";
 
+/* ---- Google Sheets backend (Google Apps Script Web App) ----
+   Paste your deployed Web App URL and the token you set in the script.
+   Leave API_URL empty to keep using localStorage only. */
+const API_URL = "https://script.google.com/macros/s/AKfycbza7BKRYSbZIetQf2nR6AqSm4v0lzWlQ7oRkl1_CUkMnhfMugbHcGWilTGmqNj8CbGe/exec";
+const API_TOKEN = "bijak1122";
+
+function apiUrl(method) {
+  if (!API_URL) return API_URL;
+  const sep = API_URL.includes("?") ? "&" : "?";
+  return API_URL + sep + "t=" + encodeURIComponent(API_TOKEN || "");
+}
+
 function defaultData() {
   if (typeof STUDENT_DATA !== "undefined") {
     return JSON.parse(JSON.stringify(STUDENT_DATA));
@@ -33,6 +45,21 @@ function loadLocal() {
 }
 
 async function loadData() {
+  if (API_URL) {
+    try {
+      const res = await fetch(apiUrl("GET"));
+      if (res.ok) {
+        const text = await res.text();
+        if (text && text.trim() && text.trim() !== "{}") {
+          const data = JSON.parse(text);
+          if (data && Array.isArray(data.students)) {
+            localStorage.setItem(DATA_KEY, JSON.stringify(data));
+            return data;
+          }
+        }
+      }
+    } catch (e) {}
+  }
   const local = loadLocal();
   if (local && Array.isArray(local.students)) return local;
   try {
@@ -47,6 +74,12 @@ async function loadData() {
 
 function saveData(data) {
   localStorage.setItem(DATA_KEY, JSON.stringify(data));
+  if (!API_URL) return;
+  fetch(apiUrl("POST"), {
+    method: "POST",
+    headers: { "Content-Type": "text/plain" },
+    body: JSON.stringify(data)
+  }).catch(() => {});
 }
 
 function uid(prefix) {
