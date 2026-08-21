@@ -2,16 +2,18 @@ const DATA_KEY = "sbm_data";
 const PIN_KEY = "sbm_pin";
 const DEFAULT_PIN = "1122";
 
-/* ---- Google Sheets backend (Google Apps Script Web App) ----
-   Paste your deployed Web App URL and the token you set in the script.
-   Leave API_URL empty to keep using localStorage only. */
-const API_URL = "https://script.google.com/macros/s/AKfycbza7BKRYSbZIetQf2nR6AqSm4v0lzWlQ7oRkl1_CUkMnhfMugbHcGWilTGmqNj8CbGe/exec";
-const API_TOKEN = "bijak1122";
+/* ---- Google Sheets backend via SheetDB (no Google login needed) ----
+   Create an API at https://sheetdb.io from a Google Sheet, then paste the
+   API URL (https://sheetdb.io/api/v1/xxxx) into API_URL.
+   The whole app data is stored as one row in a "payload" column.
+   Optional: enable an auth token in SheetDB settings and paste it in API_TOKEN. */
+const API_URL = "https://sheetdb.io/api/v1/pmny4gh9q0k6n";
+const API_TOKEN = "";
 
-function apiUrl(method) {
-  if (!API_URL) return API_URL;
-  const sep = API_URL.includes("?") ? "&" : "?";
-  return API_URL + sep + "t=" + encodeURIComponent(API_TOKEN || "");
+function apiHeaders() {
+  const h = { "Content-Type": "application/json" };
+  if (API_TOKEN) h["Authorization"] = "Bearer " + API_TOKEN;
+  return h;
 }
 
 function defaultData() {
@@ -47,11 +49,11 @@ function loadLocal() {
 async function loadData() {
   if (API_URL) {
     try {
-      const res = await fetch(apiUrl("GET"));
+      const res = await fetch(API_URL, { headers: apiHeaders() });
       if (res.ok) {
-        const text = await res.text();
-        if (text && text.trim() && text.trim() !== "{}") {
-          const data = JSON.parse(text);
+        const rows = await res.json();
+        if (Array.isArray(rows) && rows.length && rows[0].payload) {
+          const data = JSON.parse(rows[0].payload);
           if (data && Array.isArray(data.students)) {
             localStorage.setItem(DATA_KEY, JSON.stringify(data));
             return data;
@@ -72,14 +74,45 @@ async function loadData() {
   return defaultData();
 }
 
+function sbmToast(msg) {
+  let el = document.getElementById("sbmToast");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "sbmToast";
+    el.style.cssText = "position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#b42318;color:#fff;padding:10px 16px;border-radius:10px;font:600 14px sans-serif;z-index:9999;box-shadow:0 6px 20px rgba(0,0,0,.25);max-width:90vw";
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  el.style.display = "block";
+  clearTimeout(el._t);
+  el._t = setTimeout(() => { el.style.display = "none"; }, 6000);
+}
+
 function saveData(data) {
   localStorage.setItem(DATA_KEY, JSON.stringify(data));
   if (!API_URL) return;
-  fetch(apiUrl("POST"), {
-    method: "POST",
-    headers: { "Content-Type": "text/plain" },
-    body: JSON.stringify(data)
-  }).catch(() => {});
+  const row = JSON.stringify({ payload: JSON.stringify(data) });
+  // SheetDB free tier blocks PUT /all, so: delete all rows, then insert the
+  // current data as a single row. localStorage keeps a local cache meanwhile.
+  fetch(API_URL + "/all", { method: "DELETE", headers: apiHeaders() })
+    .then(() => fetch(API_URL, {
+      method: "POST",
+      headers: apiHeaders(),
+      body: row
+    }))
+    .then(async r => {
+      if (!r.ok) {
+        const txt = await r.text();
+        console.error("Bijak save gagal:", r.status, txt);
+        sbmToast("Simpan gagal (" + r.status + "). Semak API_URL SheetDB.");
+      } else {
+        console.log("Bijak: data disimpan ke SheetDB.");
+      }
+    })
+    .catch(err => {
+      console.error("Bijak save error:", err);
+      sbmToast("Simpan gagal: " + err.message);
+    });
 }
 
 function uid(prefix) {

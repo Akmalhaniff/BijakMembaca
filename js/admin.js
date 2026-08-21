@@ -406,9 +406,7 @@ function tryUnlock() {
 }
 
 async function init() {
-  const local = loadLocal();
-  DATA = local || await loadData();
-  if (!local) saveData(DATA);
+  DATA = await loadData();
   renderSettings();
   fillClassFilter();
   renderTable();
