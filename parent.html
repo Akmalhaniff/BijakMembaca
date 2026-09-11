@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kemajuan Anak — Program Bijak Membaca</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .parent-hero { text-align:center; padding:24px 0 }
+    .parent-hero .emblem { margin:0 auto 12px; background:linear-gradient(135deg,var(--primary),var(--accent)) }
+    .student-header { display:flex; align-items:center; gap:16px; margin-bottom:24px }
+    .student-header .avatar { width:72px; height:72px; font-size:28px }
+    .student-header h2 { margin:0; font-size:24px }
+    .student-header .meta { color:var(--muted); font-size:14px }
+    .progress-card { margin-bottom:16px }
+    .progress-card h4 { display:flex; align-items:center; gap:8px; margin-bottom:12px }
+    .stagelist .stage { display:flex; align-items:center; gap:10px; padding:10px; border-radius:10px; margin-bottom:8px; background:var(--bg) }
+    .stagelist .stage.done { background:#ecfdf5; border:1px solid #a7f3d0 }
+    .stagelist .stage.cur { background:#fef3c7; border:1px solid #fde68a }
+    .stagelist .stage.todo { background:var(--bg); border:1px solid var(--border) }
+    .stagelist .dot { width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:13px }
+    .stagelist .stage.done .dot { background:var(--good); color:#fff }
+    .stagelist .stage.cur .dot { background:var(--accent); color:#fff }
+    .stagelist .stage.todo .dot { background:var(--border); color:var(--muted) }
+    .attrow { display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--border) }
+    .attrow:last-child { border-bottom:none }
+    .attrow .st.hadir { color:var(--good); font-weight:600 }
+    .attrow .st.tiada { color:var(--bad); font-weight:600 }
+    .quiz-row { display:flex; align-items:center; gap:12px; margin-bottom:10px }
+    .quiz-row .qt { flex:1; font-weight:600 }
+    .quiz-row .track { flex:2; height:8px; background:var(--bg); border-radius:4px; overflow:hidden }
+    .quiz-row .track i { display:block; height:100%; border-radius:4px }
+    .quiz-row .qs { width:50px; text-align:right; font-weight:700 }
+    .vocab-wrap { display:flex; flex-wrap:wrap; gap:6px }
+    .vocab-wrap .tag { background:var(--primary-light); color:var(--primary-dark); padding:4px 10px; border-radius:999px; font-size:13px; font-weight:600 }
+    .empty-state { text-align:center; padding:40px; color:var(--muted) }
+    .empty-state .big { font-size:48px; margin-bottom:12px }
+  </style>
+</head>
+<body>
+  <header class="site">
+    <div class="wrap">
+      <div class="emblem">BM</div>
+      <div class="titles">
+        <h1 id="schoolName">SMK Puncak Alam 3</h1>
+        <p id="programName">Program Bijak Membaca</p>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap" id="mainContent" style="display:none">
+    <div class="parent-hero">
+      <div class="emblem" style="width:56px;height:56px;font-size:22px">BM</div>
+      <h1>Kemajuan Anak</h1>
+      <p id="programDesc">Program Bijak Membaca</p>
+    </div>
+
+    <div class="card" id="studentCard"></div>
+
+    <div class="card empty-state" id="emptyState" style="display:none">
+      <div class="big">🔍</div>
+      <p>Tiada data murid ditemui.</p>
+      <p style="font-size:13px;margin-top:8px">Sila dapatkan pautan khas daripada guru kelas.</p>
+    </div>
+  </main>
+
+  <footer class="site">
+    © <span id="footYear"></span> <b>SMK Puncak Alam 3</b> — Program Bijak Membaca
+  </footer>
+
+  <script src="js/sample.js"></script>
+  <script src="js/data.js"></script>
+  <script>
+    function getStudentIdFromUrl() {
+      const params = new URLSearchParams(window.location.search);
+      return params.get("student");
+    }
+
+    function renderStudent(s, data) {
+      const att = attendanceStats(s);
+      const lv = levelIndex(data, s);
+      const totalLevels = data.meta.levels.length;
+      const pct = totalLevels ? Math.round(((lv + 1) / totalLevels) * 100) : 0;
+      const lastAtt = (s.attendance || []).slice().sort((a, b) => (a.d < b.d ? 1 : -1)).slice(0, 10);
+      const quizes = (s.quizzes || []).slice().sort((a, b) => (a.d < b.d ? 1 : -1)).slice(0, 10);
+      const initials = s.name.replace(/binti|bin/gi, "").trim().split(/\s+/).slice(0, 2).map(w => w[0]).join("");
+
+      document.getElementById("studentCard").innerHTML = `
+        <div class="student-header">
+          <div class="avatar ${esc(s.gender || "M")}">${esc(initials.toUpperCase())}</div>
+          <div>
+            <h2>${esc(s.name)}</h2>
+            <div class="meta">Kelas ${esc(s.class)} · ${data.meta.year}</div>
+            <div class="levelpill big" style="margin-top:8px">Tahap ${lv + 1} dari ${totalLevels}</div>
+          </div>
+        </div>
+
+        <div class="progress-card">
+          <h4>📖 Tahap Bacaan</h4>
+          <div class="progress">
+            <div class="pbar"><i style="width:${pct}%"></i></div>
+            <div class="pnum">${lv + 1}/${totalLevels}</div>
+          </div>
+          <div class="stagelist">
+            ${data.meta.levels.map((l, i) => `
+              <div class="stage ${i < lv ? "done" : i === lv ? "cur" : "todo"}">
+                <div class="dot">${i < lv ? "✓" : i + 1}</div>
+                <div class="lname">${esc(l.name)}${i === lv ? "<small>● Tahap semasa</small>" : ""}</div>
+              </div>`).join("")}
+          </div>
+        </div>
+
+        <div class="progress-card">
+          <h4>🏫 Kehadiran (${att.hadir}/${att.total} = ${att.pct}%)</h4>
+          <div class="attrows">
+            ${lastAtt.length ? lastAtt.map(a => `
+              <div class="attrow">
+                <span>${esc(fmtDate(a.d))}</span>
+                <span class="st ${a.s === "h" ? "hadir" : "tiada"}">${a.s === "h" ? "Hadir" : "Tiada"}</span>
+              </div>`).join("") : '<span style="color:var(--muted)">Tiada rekod sesi.</span>'}
+          </div>
+        </div>
+
+        <div class="progress-card">
+          <h4>📝 Keputusan Kuiz (Purata: ${quizAvg(s)} / 100)</h4>
+          ${quizes.length ? quizes.map(q => `
+            <div class="quiz-row">
+              <span class="qt" title="${esc(q.t)}">${esc(q.t)}</span>
+              <div class="track"><i style="width:${Math.min(q.s, 100)}%;background:${q.s >= 75 ? "var(--good)" : q.s >= 50 ? "var(--accent)" : "var(--bad)"}"></i></div>
+              <span class="qs">${q.s}</span>
+            </div>`).join("") : '<span style="color:var(--muted)">Tiada rekod kuiz.</span>'}
+        </div>
+
+        <div class="progress-card">
+          <h4>🔤 Kosa Kata Dikuasai (${(s.vocabulary || []).length} perkataan)</h4>
+          <div class="vocab-wrap">
+            ${(s.vocabulary || []).length ? s.vocabulary.map(w => `<span class="tag">${esc(w)}</span>`).join("") : '<span style="color:var(--muted)">Tiada perkataan dicatat.</span>'}
+          </div>
+        </div>
+      `;
+    }
+
+    async function init() {
+      const studentId = getStudentIdFromUrl();
+      document.getElementById("footYear").textContent = new Date().getFullYear();
+
+      if (!studentId) {
+        document.getElementById("mainContent").style.display = "none";
+        document.getElementById("emptyState").style.display = "block";
+        return;
+      }
+
+      const data = await loadData();
+      document.getElementById("schoolName").textContent = data.meta.schoolName;
+      document.getElementById("programName").textContent = data.meta.programName;
+      document.getElementById("programDesc").textContent = data.meta.programName;
+
+      const student = data.students.find(s => s.id === studentId);
+      if (student) {
+        document.getElementById("mainContent").style.display = "block";
+        renderStudent(student, data);
+      } else {
+        document.getElementById("mainContent").style.display = "none";
+        document.getElementById("emptyState").style.display = "block";
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>

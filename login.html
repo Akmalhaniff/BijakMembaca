@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Log Masuk — Program Bijak Membaca</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .auth-container {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: var(--bg);
+    }
+    .auth-card {
+      width: 100%;
+      max-width: 420px;
+      background: var(--card);
+      border-radius: 16px;
+      padding: 32px;
+      box-shadow: 0 10px 40px rgba(0,0,0,.08);
+    }
+    .auth-header {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+    .auth-header .emblem {
+      margin: 0 auto 16px;
+      background: linear-gradient(135deg, var(--primary), var(--accent));
+    }
+    .auth-header h1 { font-size: 22px; margin-bottom: 4px; }
+    .auth-header p { color: var(--muted); font-size: 14px; }
+    .tabs { display: flex; gap: 8px; margin-bottom: 20px; background: var(--bg); border-radius: 10px; padding: 4px; }
+    .tab { flex: 1; padding: 10px; border: none; background: transparent; font: inherit; font-weight: 600; color: var(--muted); border-radius: 8px; cursor: pointer; transition: .2s; }
+    .tab.active { background: var(--card); color: var(--primary); box-shadow: 0 2px 8px rgba(0,0,0,.05); }
+    .form-group { margin-bottom: 16px; }
+    .form-group label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: var(--text); }
+    .form-group input { width: 100%; padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px; font: inherit; font-size: 15px; transition: .2s; }
+    .form-group input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-light); }
+    .btn-block { width: 100%; padding: 14px; font-size: 15px; font-weight: 700; }
+    .auth-footer { text-align: center; margin-top: 20px; font-size: 13px; color: var(--muted); }
+    .auth-footer a { color: var(--primary); font-weight: 600; text-decoration: none; }
+    .error-msg { background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; padding: 10px 12px; border-radius: 8px; font-size: 13px; margin-bottom: 16px; display: none; }
+    .error-msg.show { display: block; }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="auth-container">
+    <div class="auth-card">
+      <div class="auth-header">
+        <div class="emblem" style="width:60px;height:60px;font-size:22px">BM</div>
+        <h1>Program Bijak Membaca</h1>
+        <p>Panel Guru — SMK Puncak Alam 3</p>
+      </div>
+
+      <div class="tabs">
+        <button class="tab active" data-tab="login">Log Masuk</button>
+        <button class="tab" data-tab="register">Daftar</button>
+      </div>
+
+      <div class="error-msg" id="errorMsg"></div>
+
+      <form id="loginForm">
+        <div class="form-group">
+          <label for="loginEmail">Emel</label>
+          <input type="email" id="loginEmail" required autocomplete="email" placeholder="guru@sekolah.edu.my">
+        </div>
+        <div class="form-group">
+          <label for="loginPassword">Kata Laluan</label>
+          <input type="password" id="loginPassword" required autocomplete="current-password" placeholder="••••••••">
+        </div>
+        <button type="submit" class="btn btn-block">Log Masuk</button>
+      </form>
+
+      <form id="registerForm" class="hidden">
+        <div class="form-group">
+          <label for="regName">Nama Penuh</label>
+          <input type="text" id="regName" required autocomplete="name" placeholder="Contoh: Cikgu Ahmad">
+        </div>
+        <div class="form-group">
+          <label for="regEmail">Emel</label>
+          <input type="email" id="regEmail" required autocomplete="email" placeholder="guru@sekolah.edu.my">
+        </div>
+        <div class="form-group">
+          <label for="regPassword">Kata Laluan</label>
+          <input type="password" id="regPassword" required autocomplete="new-password" minlength="4" placeholder="Minimum 4 karakter">
+        </div>
+        <div class="form-group">
+          <label for="regConfirm">Sahkan Kata Laluan</label>
+          <input type="password" id="regConfirm" required autocomplete="new-password" placeholder="••••••••">
+        </div>
+        <button type="submit" class="btn btn-block">Daftar Akaun</button>
+      </form>
+
+      <div class="auth-footer">
+        <p>Tiada akaun? <a href="#" data-switch="register">Daftar di sini</a></p>
+        <p style="margin-top:8px"><a href="index.html">← Kembali ke Dashboard</a></p>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/data.js"></script>
+  <script src="js/auth.js"></script>
+  <script>
+    const loginForm = document.getElementById("loginForm");
+    const registerForm = document.getElementById("registerForm");
+    const errorMsg = document.getElementById("errorMsg");
+    const tabs = document.querySelectorAll(".tab");
+
+    function showError(msg) {
+      errorMsg.textContent = msg;
+      errorMsg.classList.add("show");
+    }
+    function hideError() {
+      errorMsg.classList.remove("show");
+    }
+
+    function switchTab(tab) {
+      tabs.forEach(t => t.classList.toggle("active", t.dataset.tab === tab));
+      if (tab === "login") {
+        loginForm.classList.remove("hidden");
+        registerForm.classList.add("hidden");
+      } else {
+        loginForm.classList.add("hidden");
+        registerForm.classList.remove("hidden");
+      }
+      hideError();
+    }
+
+    tabs.forEach(t => t.addEventListener("click", () => switchTab(t.dataset.tab)));
+    document.querySelector('[data-switch="register"]').addEventListener("click", e => { e.preventDefault(); switchTab("register"); });
+
+    loginForm.addEventListener("submit", async e => {
+      e.preventDefault();
+      hideError();
+      const email = document.getElementById("loginEmail").value.trim();
+      const password = document.getElementById("loginPassword").value;
+      try {
+        await loginUser(email, password);
+        window.location.href = "admin.html";
+      } catch (err) {
+        showError(err.message);
+      }
+    });
+
+    registerForm.addEventListener("submit", async e => {
+      e.preventDefault();
+      hideError();
+      const name = document.getElementById("regName").value.trim();
+      const email = document.getElementById("regEmail").value.trim();
+      const password = document.getElementById("regPassword").value;
+      const confirm = document.getElementById("regConfirm").value;
+      if (password !== confirm) { showError("Kata laluan tidak sepadan"); return; }
+      try {
+        await registerUser(email, password, name);
+        showError("Pendaftaran berjaya! Sila log masuk.");
+        errorMsg.style.background = "#f0fdf4";
+        errorMsg.style.borderColor = "#bbf7d0";
+        errorMsg.style.color = "#166534";
+        setTimeout(() => switchTab("login"), 1500);
+      } catch (err) {
+        showError(err.message);
+      }
+    });
+
+    if (getCurrentUser()) {
+      window.location.href = "admin.html";
+    }
+  </script>
+</body>
+</html>

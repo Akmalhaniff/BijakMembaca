@@ -10,6 +10,31 @@ const DEFAULT_PIN = "1122";
 const API_URL = "https://sheetdb.io/api/v1/pmny4gh9q0k6n";
 const API_TOKEN = "";
 
+function getCurrentTeacherId() {
+  const user = getCurrentUser ? getCurrentUser() : null;
+  return user ? user.id : null;
+}
+
+function filterStudentsByTeacher(data, teacherId) {
+  if (!teacherId) return data;
+  const filtered = {
+    ...data,
+    students: (data.students || []).filter(s => s.teacherId === teacherId)
+  };
+  return filtered;
+}
+
+function addTeacherIdToStudents(data, teacherId) {
+  if (!teacherId) return data;
+  return {
+    ...data,
+    students: (data.students || []).map(s => ({
+      ...s,
+      teacherId: s.teacherId || teacherId
+    }))
+  };
+}
+
 function apiHeaders() {
   const h = { "Content-Type": "application/json" };
   if (API_TOKEN) h["Authorization"] = "Bearer " + API_TOKEN;
@@ -55,23 +80,33 @@ async function loadData() {
         if (Array.isArray(rows) && rows.length && rows[0].payload) {
           const data = JSON.parse(rows[0].payload);
           if (data && Array.isArray(data.students)) {
-            localStorage.setItem(DATA_KEY, JSON.stringify(data));
-            return data;
+            const teacherId = getCurrentTeacherId();
+            const filtered = filterStudentsByTeacher(data, teacherId);
+            const withTeacherId = addTeacherIdToStudents(filtered, teacherId);
+            localStorage.setItem(DATA_KEY, JSON.stringify(withTeacherId));
+            return withTeacherId;
           }
         }
       }
     } catch (e) {}
   }
   const local = loadLocal();
-  if (local && Array.isArray(local.students)) return local;
+  if (local && Array.isArray(local.students)) {
+    const teacherId = getCurrentTeacherId();
+    return addTeacherIdToStudents(filterStudentsByTeacher(local, teacherId), teacherId);
+  }
   try {
     const res = await fetch("data/students.json");
     if (res.ok) {
       const data = await res.json();
-      if (data && Array.isArray(data.students)) return data;
+      if (data && Array.isArray(data.students)) {
+        const teacherId = getCurrentTeacherId();
+        return addTeacherIdToStudents(filterStudentsByTeacher(data, teacherId), teacherId);
+      }
     }
   } catch (e) {}
-  return defaultData();
+  const teacherId = getCurrentTeacherId();
+  return addTeacherIdToStudents(defaultData(), teacherId);
 }
 
 function sbmToast(msg) {
@@ -88,12 +123,34 @@ function sbmToast(msg) {
   el._t = setTimeout(() => { el.style.display = "none"; }, 6000);
 }
 
-function saveData(data) {
+async function saveData(data) {
   localStorage.setItem(DATA_KEY, JSON.stringify(data));
   if (!API_URL) return;
-  const row = JSON.stringify({ payload: JSON.stringify(data) });
-  // SheetDB free tier blocks PUT /all, so: delete all rows, then insert the
-  // current data as a single row. localStorage keeps a local cache meanwhile.
+  
+  const teacherId = getCurrentTeacherId();
+  if (!teacherId) {
+    sbmToast("Tiada guru aktif. Sila log masuk semula.");
+    return;
+  }
+
+  let globalData = data;
+  try {
+    const res = await fetch(API_URL, { headers: apiHeaders() });
+    if (res.ok) {
+      const rows = await res.json();
+      if (Array.isArray(rows) && rows.length && rows[0].payload) {
+        globalData = JSON.parse(rows[0].payload);
+      }
+    }
+  } catch (e) {}
+
+  const otherStudents = (globalData.students || []).filter(s => s.teacherId !== teacherId);
+  const mergedData = {
+    ...globalData,
+    students: [...otherStudents, ...(data.students || [])]
+  };
+
+  const row = JSON.stringify({ payload: JSON.stringify(mergedData) });
   fetch(API_URL + "/all", { method: "DELETE", headers: apiHeaders() })
     .then(() => fetch(API_URL, {
       method: "POST",

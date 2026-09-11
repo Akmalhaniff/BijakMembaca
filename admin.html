@@ -15,8 +15,12 @@
     <div class="wrap">
       <div class="emblem">BM</div>
       <div class="titles">
-        <h1>Panel Admin</h1>
+        <h1>Panel Guru</h1>
         <p id="programName">Program Bijak Membaca</p>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <span id="userName" style="font-size:13px;color:var(--muted);font-weight:500"></span>
+        <button class="btn ghost sm" data-logout>Log Keluar</button>
       </div>
     </div>
     <nav class="tabs no-print">
@@ -25,69 +29,51 @@
     </nav>
   </header>
 
-  <div id="gate" class="gate">
-    <div class="card">
-      <div class="emblem" style="margin:0 auto">🔐</div>
-      <h2>Kemasukan Admin</h2>
-      <p>Masukkan PIN untuk mengurus data murid.</p>
-      <input type="password" id="pinInput" inputmode="numeric" maxlength="8" placeholder="••••">
-      <div class="err" id="pinErr"></div>
-      <button class="btn" id="pinBtn">Masuk</button>
-      <p style="font-size:12px;color:var(--muted);margin-top:10px">PIN lalai: <b>1122</b> (boleh ditukar dalam Tetapan)</p>
+  <main id="adminMain" class="wrap" style="display:none">
+
+    <div class="adminbar">
+      <div class="left">
+        <select id="classFilter">
+          <option value="">Semua Kelas</option>
+        </select>
+        <button class="btn no-print" id="addStudentBtn">+ Tambah Murid</button>
+      </div>
+      <div class="left no-print">
+        <button class="btn ghost sm" id="exportBtn">Muat Turun JSON</button>
+        <button class="btn ghost sm" id="importBtn">Muat Naik JSON</button>
+        <input type="file" id="importFile" accept=".json" hidden>
+        <button class="btn ghost sm" id="previewBtn">Lihat Dashboard</button>
+      </div>
     </div>
-  </div>
 
-  <main id="adminMain" style="display:none">
-    <div class="wrap">
+    <div id="tableWrap"></div>
 
-      <div class="adminbar">
-        <div class="left">
-          <select id="classFilter">
-            <option value="">Semua Kelas</option>
-          </select>
-          <button class="btn no-print" id="addStudentBtn">+ Tambah Murid</button>
+    <h2 class="sec no-print">Tetapan Program</h2>
+    <div class="card no-print">
+      <div class="form-grid">
+        <div class="field">
+          <label>Nama Sekolah</label>
+          <input type="text" id="setSchool">
         </div>
-        <div class="left no-print">
-          <button class="btn ghost sm" id="exportBtn">Muat Turun JSON</button>
-          <button class="btn ghost sm" id="importBtn">Muat Naik JSON</button>
-          <input type="file" id="importFile" accept=".json" hidden>
-          <button class="btn ghost sm" id="previewBtn">Lihat Dashboard</button>
+        <div class="field">
+          <label>Nama Program</label>
+          <input type="text" id="setProgram">
+        </div>
+        <div class="field">
+          <label>Tahun</label>
+          <input type="text" id="setYear">
+        </div>
+        <div class="field full">
+          <label>Tahap Bacaan (nama setiap tahap)</label>
+          <div id="levelInputs"></div>
         </div>
       </div>
-
-      <div id="tableWrap"></div>
-
-      <h2 class="sec no-print">Tetapan Program</h2>
-      <div class="card no-print">
-        <div class="form-grid">
-          <div class="field">
-            <label>Nama Sekolah</label>
-            <input type="text" id="setSchool">
-          </div>
-          <div class="field">
-            <label>Nama Program</label>
-            <input type="text" id="setProgram">
-          </div>
-          <div class="field">
-            <label>Tahun</label>
-            <input type="text" id="setYear">
-          </div>
-          <div class="field">
-            <label>Tukar PIN Admin</label>
-            <input type="text" id="setPin" maxlength="8" placeholder="PIN baru">
-          </div>
-          <div class="field full">
-            <label>Tahap Bacaan (nama setiap tahap)</label>
-            <div id="levelInputs"></div>
-          </div>
-        </div>
-        <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
-          <button class="btn" id="saveSettingsBtn">Simpan Tetapan</button>
-          <button class="btn danger" id="resetBtn">Reset kepada Data Contoh</button>
-        </div>
+      <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
+        <button class="btn" id="saveSettingsBtn">Simpan Tetapan</button>
+        <button class="btn danger" id="resetBtn">Reset kepada Data Contoh</button>
       </div>
-
     </div>
+
   </main>
 
   <div class="modal-bg" id="editModalBg">
@@ -106,11 +92,12 @@
   </div>
 
   <footer class="site">
-    <b>SMK Puncak Alam 3</b> — Panel Admin Program Bijak Membaca
+    <b>SMK Puncak Alam 3</b> — Panel Guru Program Bijak Membaca
   </footer>
 
   <script src="js/sample.js"></script>
   <script src="js/data.js"></script>
+  <script src="js/auth.js"></script>
   <script src="js/admin.js"></script>
 </body>
 </html>

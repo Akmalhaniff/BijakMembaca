@@ -1,13 +1,8 @@
 let DATA = null;
-let unlocked = false;
 let filterClass = "";
 let editing = null;
 
 /* ---------------- helpers ---------------- */
-
-function getPin() {
-  return localStorage.getItem(PIN_KEY) || DEFAULT_PIN;
-}
 
 function renderEditForm() {
   const s = editing;
@@ -187,6 +182,7 @@ function renderTable() {
           ${list.map(s => {
             const att = attendanceStats(s);
             const lv = levelIndex(DATA, s);
+            const shareUrl = `${location.origin}${location.pathname.replace("admin.html", "")}parent.html?student=${s.id}`;
             return `
             <tr>
               <td style="font-weight:700">${esc(s.name)}</td>
@@ -195,6 +191,7 @@ function renderTable() {
               <td>${att.pct}% <span class="smallmeta" style="display:inline">(${att.hadir}/${att.total})</span></td>
               <td class="actions no-print">
                 <button class="btn sm ghost editBtn" data-id="${esc(s.id)}">Edit</button>
+                <button class="btn sm ghost shareBtn" data-url="${esc(shareUrl)}" title="Kongsi ke ibu bapa">🔗</button>
               </td>
             </tr>`;
           }).join("")}
@@ -202,6 +199,16 @@ function renderTable() {
       </table>
     </div>`;
   wrap.querySelectorAll(".editBtn").forEach(b => b.addEventListener("click", () => openEditor(b.dataset.id)));
+  wrap.querySelectorAll(".shareBtn").forEach(b => b.addEventListener("click", () => {
+    const url = b.dataset.url;
+    navigator.clipboard.writeText(url).then(() => {
+      const original = b.textContent;
+      b.textContent = "✓";
+      setTimeout(() => b.textContent = original, 1500);
+    }).catch(() => {
+      prompt("Salin pautan ini:", url);
+    });
+  }));
 }
 
 /* ---------------- editor modal ---------------- */
@@ -215,6 +222,7 @@ function openEditor(id) {
 }
 
 function newStudent() {
+  const teacherId = getCurrentUser ? getCurrentUser().id : null;
   editing = {
     id: uid("s"),
     name: "",
@@ -223,7 +231,8 @@ function newStudent() {
     currentLevel: 1,
     attendance: [],
     quizzes: [],
-    vocabulary: []
+    vocabulary: [],
+    teacherId: teacherId
   };
   document.getElementById("editTitle").textContent = "Tambah Murid Baru";
   renderEditForm();
@@ -286,11 +295,6 @@ function saveSettings() {
   DATA.meta.schoolName = document.getElementById("setSchool").value.trim() || DATA.meta.schoolName;
   DATA.meta.programName = document.getElementById("setProgram").value.trim() || DATA.meta.programName;
   DATA.meta.year = document.getElementById("setYear").value.trim() || DATA.meta.year;
-  const newPin = document.getElementById("setPin").value.trim();
-  if (newPin) {
-    localStorage.setItem(PIN_KEY, newPin);
-    document.getElementById("setPin").value = "";
-  }
   saveData(DATA);
   document.getElementById("programName").textContent = DATA.meta.programName;
   renderTable();
@@ -356,6 +360,10 @@ function wireAdmin() {
       const text = await f.text();
       const data = JSON.parse(text);
       if (!data || !Array.isArray(data.students)) throw new Error("format");
+      const teacherId = getCurrentUser ? getCurrentUser().id : null;
+      if (teacherId) {
+        data.students = data.students.map(s => ({ ...s, teacherId }));
+      }
       DATA = data;
       saveData(DATA);
       fillClassFilter();
@@ -373,7 +381,7 @@ function wireAdmin() {
   });
   document.getElementById("saveSettingsBtn").addEventListener("click", saveSettings);
   document.getElementById("resetBtn").addEventListener("click", () => {
-    if (!confirm("Ini akan mengosongkan SEMUA data murid pada penyemak imbas ini. Teruskan?")) return;
+    if (!confirm("Ini akan mengosongkan SEMUA data murid anda. Teruskan?")) return;
     const d = defaultData();
     DATA.meta.schoolName = d.meta.schoolName;
     DATA.meta.programName = d.meta.programName;
@@ -384,29 +392,16 @@ function wireAdmin() {
     fillClassFilter();
     renderSettings();
     renderTable();
-    alert("Data telah dikosongkan. Gunakan import JSON untuk memuatkan semula data sedia ada.");
+    alert("Data telah dikosongkan.");
   });
-
-  document.getElementById("pinBtn").addEventListener("click", tryUnlock);
-  document.getElementById("pinInput").addEventListener("keydown", e => {
-    if (e.key === "Enter") tryUnlock();
-  });
-}
-
-function tryUnlock() {
-  const v = document.getElementById("pinInput").value.trim();
-  if (v === getPin()) {
-    unlocked = true;
-    document.getElementById("gate").style.display = "none";
-    document.getElementById("adminMain").style.display = "block";
-  } else {
-    document.getElementById("pinErr").textContent = "PIN salah. Cuba lagi.";
-    document.getElementById("pinInput").value = "";
-  }
 }
 
 async function init() {
+  const user = requireAuth("login.html");
+  if (!user) return;
+  
   DATA = await loadData();
+  document.getElementById("adminMain").style.display = "block";
   renderSettings();
   fillClassFilter();
   renderTable();
