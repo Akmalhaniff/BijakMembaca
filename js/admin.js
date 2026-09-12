@@ -7,6 +7,9 @@ let editing = null;
 function renderEditForm() {
   const s = editing;
   const body = document.getElementById("editBody");
+  const photoPreview = s.photo ? `<img src="${esc(s.photo)}" alt="${esc(s.name)}" style="width:80px;height:80px;border-radius:50%;object-fit:cover;margin-top:8px;border:2px solid var(--primary)">` : '';
+  const levelUp = checkLevelUp(DATA, s);
+  const levelUpBadge = levelUp ? `<span class="levelpill" style="background:#e8f8f5;color:var(--good);margin-left:8px;cursor:help" title="${esc(levelUp.reason)}">🎓 Sedia naik ke Tahap ${levelUp.nextLevel}</span>` : '';
   body.innerHTML = `
     <div class="form-grid">
       <div class="field">
@@ -26,9 +29,21 @@ function renderEditForm() {
       </div>
       <div class="field">
         <label>Tahap Semasa</label>
-        <select id="inLevel">
-          ${DATA.meta.levels.map((l, i) => `<option value="${i + 1}" ${(s.currentLevel || 1) === i + 1 ? "selected" : ""}>Tahap ${i + 1} — ${esc(l.name)}</option>`).join("")}
-        </select>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <select id="inLevel" style="flex:1">
+            ${DATA.meta.levels.map((l, i) => `<option value="${i + 1}" ${(s.currentLevel || 1) === i + 1 ? "selected" : ""}>Tahap ${i + 1} — ${esc(l.name)}</option>`).join("")}
+          </select>
+          ${levelUpBadge}
+        </div>
+      </div>
+
+      <div class="field full">
+        <label>Gambar Murid</label>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <div id="photoPreview">${photoPreview}</div>
+          <input type="file" id="inPhoto" accept="image/*" style="flex:1">
+          <small style="color:var(--muted)">Maks 500KB. Akan disimpan sebagai base64.</small>
+        </div>
       </div>
 
       <div class="full">
@@ -80,7 +95,19 @@ function renderEditForm() {
 function renderAttList() {
   const el = document.getElementById("attList");
   const list = (editing.attendance || []).slice().sort((a, b) => (a.d < b.d ? 1 : -1));
-  el.innerHTML = list.length ? list.map((a, i) => `
+  const today = new Date().toISOString().slice(0, 10);
+  const hasToday = list.some(a => a.d === today);
+  el.innerHTML = `
+    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+      <input type="date" id="attDate" value="${today}">
+      <select id="attStatus">
+        <option value="h">Hadir</option>
+        <option value="a">Tiada</option>
+      </select>
+      <button class="btn sm" id="addAttBtn">Tambah</button>
+      <button class="btn ghost sm" id="markAllPresentBtn" ${hasToday ? "disabled" : ""}>✓ Semua Hadir Hari Ini</button>
+    </div>
+    ${list.length ? list.map((a, i) => `
     <div class="attrow">
       <span>${esc(fmtDate(a.d))}</span>
       <span style="display:flex;gap:8px;align-items:center">
@@ -90,7 +117,8 @@ function renderAttList() {
         </select>
         <button class="btn danger sm att-del" data-i="${i}">Padam</button>
       </span>
-    </div>`).join("") : '<span style="color:var(--muted);font-size:13px">Tiada sesi dicatat.</span>';
+    </div>`).join("") : '<span style="color:var(--muted);font-size:13px">Tiada sesi dicatat.</span>'}
+  `;
 }
 
 function renderQuizList() {
@@ -121,6 +149,24 @@ function bindEditorEvents() {
     if (editing.attendance.some(a => a.d === d)) return;
     editing.attendance.push({ d: d, s: st });
     renderAttList();
+  });
+  document.getElementById("markAllPresentBtn").addEventListener("click", () => {
+    const d = document.getElementById("attDate").value;
+    if (!d) return;
+    editing.attendance = editing.attendance || [];
+    if (editing.attendance.some(a => a.d === d)) return;
+    const studentsInClass = DATA.students.filter(s => s.class === editing.class);
+    studentsInClass.forEach(s => {
+      s.attendance = s.attendance || [];
+      if (!s.attendance.some(a => a.d === d)) {
+        s.attendance.push({ d: d, s: "h" });
+      }
+    });
+    editing.attendance.push({ d: d, s: "h" });
+    saveData(DATA);
+    renderAttList();
+    renderTable();
+    sbmToast("Kehadiran dikemaskini untuk semua murid kelas " + editing.class);
   });
   document.addEventListener("click", e => {
     if (e.target.classList.contains("att-del")) {
@@ -183,6 +229,15 @@ function renderTable() {
             const att = attendanceStats(s);
             const lv = levelIndex(DATA, s);
             const shareUrl = `${location.origin}${location.pathname.replace("admin.html", "")}parent.html?student=${s.id}`;
+            const waText = encodeURIComponent(
+              `📚 *Laporan Kemajuan ${s.name}*\n` +
+              `Kelas: ${s.class}\n` +
+              `Tahap: ${DATA.meta.levels[lv].name}\n` +
+              `Kehadiran: ${att.pct}%\n` +
+              `Purata Kuiz: ${quizAvg(s)}/100\n\n` +
+              `Lihat penuh: ${shareUrl}\n` +
+              `_Program Bijak Membaca - ${DATA.meta.schoolName}_`
+            );
             return `
             <tr>
               <td style="font-weight:700">${esc(s.name)}</td>
@@ -191,7 +246,8 @@ function renderTable() {
               <td>${att.pct}% <span class="smallmeta" style="display:inline">(${att.hadir}/${att.total})</span></td>
               <td class="actions no-print">
                 <button class="btn sm ghost editBtn" data-id="${esc(s.id)}">Edit</button>
-                <button class="btn sm ghost shareBtn" data-url="${esc(shareUrl)}" title="Kongsi ke ibu bapa">🔗</button>
+                <button class="btn sm ghost shareBtn" data-url="${esc(shareUrl)}" title="Kongsi pautan ke ibu bapa">🔗</button>
+                <button class="btn sm ghost waBtn" data-url="https://wa.me/?text=${waText}" title="Kongsi via WhatsApp">📱</button>
               </td>
             </tr>`;
           }).join("")}
@@ -208,6 +264,9 @@ function renderTable() {
     }).catch(() => {
       prompt("Salin pautan ini:", url);
     });
+  }));
+  wrap.querySelectorAll(".waBtn").forEach(b => b.addEventListener("click", () => {
+    window.open(b.dataset.url, "_blank");
   }));
 }
 
@@ -249,16 +308,38 @@ function saveEditing() {
   editing.class = cls;
   editing.gender = gender;
   editing.currentLevel = level;
-  const existing = DATA.students.find(s => s.id === editing.id);
-  if (existing) {
-    Object.assign(existing, editing);
-  } else {
-    DATA.students.push(editing);
+  
+  // Handle photo upload
+  const photoInput = document.getElementById("inPhoto");
+  if (photoInput && photoInput.files[0]) {
+    const file = photoInput.files[0];
+    if (file.size > 500 * 1024) {
+      alert("Gambar terlalu besar. Maksimum 500KB.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = e => {
+      editing.photo = e.target.result;
+      doSave();
+    };
+    reader.readAsDataURL(file);
+    return;
   }
-  saveData(DATA);
-  closeEditor();
-  fillClassFilter();
-  renderTable();
+  
+  doSave();
+  
+  function doSave() {
+    const existing = DATA.students.find(s => s.id === editing.id);
+    if (existing) {
+      Object.assign(existing, editing);
+    } else {
+      DATA.students.push(editing);
+    }
+    saveData(DATA);
+    closeEditor();
+    fillClassFilter();
+    renderTable();
+  }
 }
 
 function closeEditor() {
@@ -375,6 +456,43 @@ function wireAdmin() {
     }
     e.target.value = "";
   });
+  document.getElementById("importCsvBtn").addEventListener("click", () => document.getElementById("importCsvFile").click());
+  document.getElementById("importCsvFile").addEventListener("change", async e => {
+    const f = e.target.files[0];
+    if (!f) return;
+    try {
+      const text = await f.text();
+      const result = Papa.parse(text, { header: true, skipEmptyLines: true });
+      if (result.errors.length) {
+        alert("Ralat CSV: " + result.errors.map(e => e.message).join(", "));
+        return;
+      }
+      const teacherId = getCurrentUser ? getCurrentUser().id : null;
+      const imported = result.data.map((row, i) => ({
+        id: uid("s"),
+        name: (row.nama || row.name || "").trim(),
+        class: (row.kelas || row.class || "").trim(),
+        gender: (row.jantina || row.gender || "P").trim().toUpperCase().charAt(0),
+        currentLevel: parseInt(row.tahap || row.level || "1", 10) || 1,
+        attendance: [],
+        quizzes: [],
+        vocabulary: [],
+        teacherId: teacherId
+      })).filter(s => s.name && s.class);
+      if (!imported.length) {
+        alert("Tiada data murid sah dalam CSV. Pastikan lajur 'nama' dan 'kelas' wujud.");
+        return;
+      }
+      DATA.students.push(...imported);
+      saveData(DATA);
+      fillClassFilter();
+      renderTable();
+      alert(`${imported.length} murid berjaya diimport dari CSV.`);
+    } catch (err) {
+      alert("Gagal import CSV: " + err.message);
+    }
+    e.target.value = "";
+  });
   document.getElementById("previewBtn").addEventListener("click", () => {
     saveData(DATA);
     window.open("index.html", "_blank");
@@ -394,6 +512,133 @@ function wireAdmin() {
     renderTable();
     alert("Data telah dikosongkan.");
   });
+  document.getElementById("printReportBtn").addEventListener("click", () => {
+    if (!editing) return;
+    printStudentReport(editing);
+  });
+}
+
+function printStudentReport(s) {
+  const att = attendanceStats(s);
+  const lv = levelIndex(DATA, s);
+  const totalLevels = DATA.meta.levels.length;
+  const pct = totalLevels ? Math.round(((lv + 1) / totalLevels) * 100) : 0;
+  const lastAtt = (s.attendance || []).slice().sort((a, b) => (a.d < b.d ? 1 : -1));
+  const quizes = (s.quizzes || []).slice().sort((a, b) => (a.d < b.d ? 1 : -1));
+  const initials = s.name.replace(/binti|bin/gi, "").trim().split(/\s+/).slice(0, 2).map(w => w[0]).join("");
+
+  const html = `
+    <!DOCTYPE html>
+    <html lang="ms">
+    <head>
+      <meta charset="UTF-8">
+      <title>Laporan ${esc(s.name)}</title>
+      <style>
+        body { font-family: Arial, sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; }
+        .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #333; padding-bottom: 10px; }
+        .header h1 { margin: 0; color: #2c3e50; }
+        .header p { margin: 5px 0; color: #666; }
+        .student-info { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px; }
+        .avatar { width: 60px; height: 60px; border-radius: 50%; background: #3498db; color: white; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: bold; }
+        .student-details h2 { margin: 0 0 5px; }
+        .student-details p { margin: 2px 0; color: #666; }
+        .level-badge { display: inline-block; padding: 5px 12px; background: #3498db; color: white; border-radius: 20px; font-weight: bold; margin-top: 10px; }
+        .section { margin-bottom: 20px; }
+        .section h3 { border-bottom: 1px solid #eee; padding-bottom: 5px; color: #2c3e50; }
+        .progress-bar { width: 100%; height: 20px; background: #ecf0f1; border-radius: 10px; overflow: hidden; margin: 10px 0; }
+        .progress-fill { height: 100%; background: linear-gradient(90deg, #3498db, #2ecc71); }
+        .stage { display: flex; align-items: center; gap: 10px; padding: 8px; margin: 5px 0; border-radius: 5px; }
+        .stage.done { background: #e8f8f5; }
+        .stage.current { background: #fef9e7; }
+        .stage.todo { background: #f8f9fa; }
+        .stage .dot { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 12px; }
+        .stage.done .dot { background: #27ae60; color: white; }
+        .stage.current .dot { background: #f39c12; color: white; }
+        .stage.todo .dot { background: #bdc3c7; color: white; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
+        th, td { padding: 8px; text-align: left; border-bottom: 1px solid #eee; }
+        th { background: #f8f9fa; font-weight: 600; }
+        .present { color: #27ae60; font-weight: 600; }
+        .absent { color: #e74c3c; font-weight: 600; }
+        .quiz-row { display: flex; align-items: center; gap: 10px; margin: 8px 0; }
+        .quiz-title { flex: 1; }
+        .quiz-bar { flex: 2; height: 10px; background: #ecf0f1; border-radius: 5px; overflow: hidden; }
+        .quiz-fill { height: 100%; border-radius: 5px; }
+        .quiz-score { width: 50px; text-align: right; font-weight: bold; }
+        .vocab { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px; }
+        .vocab span { background: #3498db; color: white; padding: 3px 10px; border-radius: 15px; font-size: 12px; }
+        .footer { margin-top: 30px; text-align: center; color: #999; font-size: 12px; }
+        @media print { .no-print { display: none !important; } }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <h1>${esc(DATA.meta.schoolName)}</h1>
+        <p>${esc(DATA.meta.programName)} — ${esc(DATA.meta.year)}</p>
+      </div>
+
+      <div class="student-info">
+        <div class="avatar">${esc(initials.toUpperCase())}</div>
+        <div class="student-details">
+          <h2>${esc(s.name)}</h2>
+          <p>Kelas: ${esc(s.class)} | Jantina: ${s.gender === "P" ? "Perempuan" : "Lelaki"}</p>
+          <span class="level-badge">Tahap ${lv + 1} dari ${totalLevels}: ${esc(DATA.meta.levels[lv].name)}</span>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3>📖 Tahap Bacaan</h3>
+        <div class="progress-bar"><div class="progress-fill" style="width: ${pct}%"></div></div>
+        <div>${lv + 1} / ${totalLevels} tahap selesai</div>
+        <div style="margin-top: 10px;">
+          ${DATA.meta.levels.map((l, i) => `
+            <div class="stage ${i < lv ? "done" : i === lv ? "current" : "todo"}">
+              <div class="dot">${i < lv ? "✓" : i + 1}</div>
+              <div>${esc(l.name)}${i === lv ? " <em>(tahap semasa)</em>" : ""}</div>
+            </div>`).join("")}
+        </div>
+      </div>
+
+      <div class="section">
+        <h3>🏫 Kehadiran (${att.hadir}/${att.total} = ${att.pct}%)</h3>
+        <table>
+          <thead><tr><th>Tarikh</th><th>Status</th></tr></thead>
+          <tbody>
+            ${lastAtt.length ? lastAtt.map(a => `
+              <tr><td>${esc(fmtDate(a.d))}</td><td class="${a.s === "h" ? "present" : "absent"}">${a.s === "h" ? "Hadir" : "Tiada"}</td></tr>`).join("") : '<tr><td colspan="2">Tiada rekod</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="section">
+        <h3>📝 Keputusan Kuiz (Purata: ${quizAvg(s)} / 100)</h3>
+        ${quizes.length ? quizes.map(q => `
+          <div class="quiz-row">
+            <span class="quiz-title">${esc(q.t)}</span>
+            <div class="quiz-bar"><div class="quiz-fill" style="width: ${Math.min(q.s, 100)}%; background: ${q.s >= 75 ? "#27ae60" : q.s >= 50 ? "#f39c12" : "#e74c3c"}"></div></div>
+            <span class="quiz-score">${q.s}</span>
+          </div>`).join("") : '<p>Tiada rekod kuiz.</p>'}
+      </div>
+
+      <div class="section">
+        <h3>🔤 Kosa Kata Dikuasai (${(s.vocabulary || []).length} perkataan)</h3>
+        <div class="vocab">
+          ${(s.vocabulary || []).length ? s.vocabulary.map(w => `<span>${esc(w)}</span>`).join("") : '<span style="color:#999">Tiada perkataan dicatat</span>'}
+        </div>
+      </div>
+
+      <div class="footer">
+        Dihasilkan pada ${new Date().toLocaleDateString("ms-MY")} | ${esc(DATA.meta.schoolName)} — Program Bijak Membaca
+      </div>
+
+      <script>window.onload = () => window.print();<\/script>
+    </body>
+    </html>
+  `;
+
+  const win = window.open("", "_blank");
+  win.document.write(html);
+  win.document.close();
 }
 
 async function init() {

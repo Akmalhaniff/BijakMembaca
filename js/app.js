@@ -19,6 +19,8 @@ function studentCard(s) {
   const att = attendanceStats(s);
   const lv = levelIndex(DATA, s);
   const initials = s.name.replace(/binti|bin/gi, "").trim().split(/\s+/).slice(0, 2).map(w => w[0]).join("");
+  const levelUp = checkLevelUp(DATA, s);
+  const levelUpBadge = levelUp ? `<span class="levelpill" style="background:#e8f8f5;color:var(--good);font-size:11px;margin-top:4px;display:inline-block" title="${esc(levelUp.reason)}">🎓 Sedia naik Tahap ${levelUp.nextLevel}</span>` : '';
   return `
     <div class="card student" data-id="${esc(s.id)}">
       <div class="row">
@@ -29,6 +31,7 @@ function studentCard(s) {
         </div>
       </div>
       <div class="levelpill big">${esc(DATA.meta.levels[lv].short)} · ${esc(DATA.meta.levels[lv].name)}</div>
+      ${levelUpBadge}
       <div class="attbar" title="Kehadiran ${att.pct}%"><i style="width:${att.pct}%"></i></div>
       <div class="smallmeta">
         <span>Kehadiran ${att.pct}%</span>

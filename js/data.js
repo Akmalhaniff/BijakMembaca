@@ -207,6 +207,27 @@ function levelName(data, s) {
   return data.meta.levels[levelIndex(data, s)].name;
 }
 
+function checkLevelUp(data, s) {
+  const currentLevel = s.currentLevel || 1;
+  const totalLevels = data.meta.levels.length;
+  if (currentLevel >= totalLevels) return null;
+  
+  const avgQuiz = quizAvg(s);
+  const att = attendanceStats(s);
+  const attendancePct = att.pct;
+  const recentQuizzes = (s.quizzes || []).slice().sort((a, b) => (a.d < b.d ? 1 : -1)).slice(0, 3);
+  const recentAvg = recentQuizzes.length ? Math.round(recentQuizzes.reduce((a, q) => a + q.s, 0) / recentQuizzes.length) : 0;
+  
+  const ready = avgQuiz >= 75 && attendancePct >= 80 && recentAvg >= 75;
+  if (!ready) return null;
+  
+  return {
+    nextLevel: currentLevel + 1,
+    nextLevelName: data.meta.levels[currentLevel].name,
+    reason: `Purata kuiz ${avgQuiz}%, Kehadiran ${attendancePct}%, 3 kuiz terkini ${recentAvg}%`
+  };
+}
+
 function programStats(data) {
   const students = data.students || [];
   const total = students.length;

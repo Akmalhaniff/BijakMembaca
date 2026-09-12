@@ -48,6 +48,7 @@
         <h1 id="schoolName">SMK Puncak Alam 3</h1>
         <p id="programName">Program Bijak Membaca</p>
       </div>
+      <button class="btn ghost sm" data-dark-toggle aria-label="Tukar mod gelap/terang">🌙</button>
     </div>
   </header>
 
@@ -56,6 +57,10 @@
       <div class="emblem" style="width:56px;height:56px;font-size:22px">BM</div>
       <h1>Kemajuan Anak</h1>
       <p id="programDesc">Program Bijak Membaca</p>
+      <div style="display:flex;gap:8px;justify-content:center;margin-top:12px;flex-wrap:wrap">
+        <button class="btn ghost no-print" id="printBtn">🖨 Cetak Laporan</button>
+        <button class="btn ghost no-print" id="whatsappBtn">📱 Kongsi WhatsApp</button>
+      </div>
     </div>
 
     <div class="card" id="studentCard"></div>
@@ -73,6 +78,7 @@
 
   <script src="js/sample.js"></script>
   <script src="js/data.js"></script>
+  <script src="js/darkmode.js"></script>
   <script>
     function getStudentIdFromUrl() {
       const params = new URLSearchParams(window.location.search);
@@ -87,6 +93,14 @@
       const lastAtt = (s.attendance || []).slice().sort((a, b) => (a.d < b.d ? 1 : -1)).slice(0, 10);
       const quizes = (s.quizzes || []).slice().sort((a, b) => (a.d < b.d ? 1 : -1)).slice(0, 10);
       const initials = s.name.replace(/binti|bin/gi, "").trim().split(/\s+/).slice(0, 2).map(w => w[0]).join("");
+      const levelUp = checkLevelUp(data, s);
+      const levelUpBanner = levelUp ? `<div style="background:#e8f8f5;border:2px solid var(--good);border-radius:10px;padding:12px;margin-bottom:16px;display:flex;align-items:center;gap:12px">
+        <span style="font-size:24px">🎓</span>
+        <div>
+          <strong style="color:var(--good)">Sedia naik ke Tahap ${levelUp.nextLevel}: ${levelUp.nextLevelName}!</strong>
+          <br><small style="color:var(--muted)">${levelUp.reason}</small>
+        </div>
+      </div>` : '';
 
       document.getElementById("studentCard").innerHTML = `
         <div class="student-header">
@@ -97,6 +111,8 @@
             <div class="levelpill big" style="margin-top:8px">Tahap ${lv + 1} dari ${totalLevels}</div>
           </div>
         </div>
+
+        ${levelUpBanner}
 
         <div class="progress-card">
           <h4>📖 Tahap Bacaan</h4>
@@ -169,6 +185,171 @@
     }
 
     init();
+  </script>
+  <script>
+    document.getElementById("printBtn")?.addEventListener("click", () => {
+      const studentId = new URLSearchParams(window.location.search).get("student");
+      if (!studentId) return;
+      fetch(`js/data.js`).then(() => {
+        const script = document.createElement("script");
+        script.src = "js/data.js";
+        document.head.appendChild(script);
+        script.onload = () => {
+          loadData().then(data => {
+            const student = data.students.find(s => s.id === studentId);
+            if (student) printStudentReport(student, data);
+          });
+        };
+      });
+    });
+
+    document.getElementById("whatsappBtn")?.addEventListener("click", () => {
+      const studentId = new URLSearchParams(window.location.search).get("student");
+      if (!studentId) return;
+      loadData().then(data => {
+        const student = data.students.find(s => s.id === studentId);
+        if (!student) return;
+        const url = window.location.href;
+        const text = encodeURIComponent(
+          `📚 *Laporan Kemajuan ${student.name}*\n` +
+          `Kelas: ${student.class}\n` +
+          `Tahap: ${data.meta.levels[levelIndex(data, student)].name}\n` +
+          `Kehadiran: ${attendanceStats(student).pct}%\n` +
+          `Purata Kuiz: ${quizAvg(student)}/100\n\n` +
+          `Lihat penuh: ${url}\n` +
+          `_Program Bijak Membaca - ${data.meta.schoolName}_`
+        );
+        window.open(`https://wa.me/?text=${text}`, "_blank");
+      });
+    });
+
+    function printStudentReport(s, data) {
+      const att = attendanceStats(s);
+      const lv = levelIndex(data, s);
+      const totalLevels = data.meta.levels.length;
+      const pct = totalLevels ? Math.round(((lv + 1) / totalLevels) * 100) : 0;
+      const lastAtt = (s.attendance || []).slice().sort((a, b) => (a.d < b.d ? 1 : -1));
+      const quizes = (s.quizzes || []).slice().sort((a, b) => (a.d < b.d ? 1 : -1));
+      const initials = s.name.replace(/binti|bin/gi, "").trim().split(/\s+/).slice(0, 2).map(w => w[0]).join("");
+
+      const html = `
+        <!DOCTYPE html>
+        <html lang="ms">
+        <head>
+          <meta charset="UTF-8">
+          <title>Laporan ${esc(s.name)}</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; }
+            .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #333; padding-bottom: 10px; }
+            .header h1 { margin: 0; color: #2c3e50; }
+            .header p { margin: 5px 0; color: #666; }
+            .student-info { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px; }
+            .avatar { width: 60px; height: 60px; border-radius: 50%; background: #3498db; color: white; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: bold; }
+            .student-details h2 { margin: 0 0 5px; }
+            .student-details p { margin: 2px 0; color: #666; }
+            .level-badge { display: inline-block; padding: 5px 12px; background: #3498db; color: white; border-radius: 20px; font-weight: bold; margin-top: 10px; }
+            .section { margin-bottom: 20px; }
+            .section h3 { border-bottom: 1px solid #eee; padding-bottom: 5px; color: #2c3e50; }
+            .progress-bar { width: 100%; height: 20px; background: #ecf0f1; border-radius: 10px; overflow: hidden; margin: 10px 0; }
+            .progress-fill { height: 100%; background: linear-gradient(90deg, #3498db, #2ecc71); }
+            .stage { display: flex; align-items: center; gap: 10px; padding: 8px; margin: 5px 0; border-radius: 5px; }
+            .stage.done { background: #e8f8f5; }
+            .stage.current { background: #fef9e7; }
+            .stage.todo { background: #f8f9fa; }
+            .stage .dot { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 12px; }
+            .stage.done .dot { background: #27ae60; color: white; }
+            .stage.current .dot { background: #f39c12; color: white; }
+            .stage.todo .dot { background: #bdc3c7; color: white; }
+            table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
+            th, td { padding: 8px; text-align: left; border-bottom: 1px solid #eee; }
+            th { background: #f8f9fa; font-weight: 600; }
+            .present { color: #27ae60; font-weight: 600; }
+            .absent { color: #e74c3c; font-weight: 600; }
+            .quiz-row { display: flex; align-items: center; gap: 10px; margin: 8px 0; }
+            .quiz-title { flex: 1; }
+            .quiz-bar { flex: 2; height: 10px; background: #ecf0f1; border-radius: 5px; overflow: hidden; }
+            .quiz-fill { height: 100%; border-radius: 5px; }
+            .quiz-score { width: 50px; text-align: right; font-weight: bold; }
+            .vocab { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px; }
+            .vocab span { background: #3498db; color: white; padding: 3px 10px; border-radius: 15px; font-size: 12px; }
+            .footer { margin-top: 30px; text-align: center; color: #999; font-size: 12px; }
+            @media print { .no-print { display: none !important; } }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>${esc(data.meta.schoolName)}</h1>
+            <p>${esc(data.meta.programName)} — ${esc(data.meta.year)}</p>
+          </div>
+
+          <div class="student-info">
+            <div class="avatar">${esc(initials.toUpperCase())}</div>
+            <div class="student-details">
+              <h2>${esc(s.name)}</h2>
+              <p>Kelas: ${esc(s.class)} | Jantina: ${s.gender === "P" ? "Perempuan" : "Lelaki"}</p>
+              <span class="level-badge">Tahap ${lv + 1} dari ${totalLevels}: ${esc(data.meta.levels[lv].name)}</span>
+            </div>
+          </div>
+
+          <div class="section">
+            <h3>📖 Tahap Bacaan</h3>
+            <div class="progress-bar"><div class="progress-fill" style="width: ${pct}%"></div></div>
+            <div>${lv + 1} / ${totalLevels} tahap selesai</div>
+            <div style="margin-top: 10px;">
+              ${data.meta.levels.map((l, i) => `
+                <div class="stage ${i < lv ? "done" : i === lv ? "current" : "todo"}">
+                  <div class="dot">${i < lv ? "✓" : i + 1}</div>
+                  <div>${esc(l.name)}${i === lv ? " <em>(tahap semasa)</em>" : ""}</div>
+                </div>`).join("")}
+            </div>
+          </div>
+
+          <div class="section">
+            <h3>🏫 Kehadiran (${att.hadir}/${att.total} = ${att.pct}%)</h3>
+            <table>
+              <thead><tr><th>Tarikh</th><th>Status</th></tr></thead>
+              <tbody>
+                ${lastAtt.length ? lastAtt.map(a => `
+                  <tr><td>${esc(fmtDate(a.d))}</td><td class="${a.s === "h" ? "present" : "absent"}">${a.s === "h" ? "Hadir" : "Tiada"}</td></tr>`).join("") : '<tr><td colspan="2">Tiada rekod</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+
+          <div class="section">
+            <h3>📝 Keputusan Kuiz (Purata: ${quizAvg(s)} / 100)</h3>
+            ${quizes.length ? quizes.map(q => `
+              <div class="quiz-row">
+                <span class="quiz-title">${esc(q.t)}</span>
+                <div class="quiz-bar"><div class="quiz-fill" style="width: ${Math.min(q.s, 100)}%; background: ${q.s >= 75 ? "#27ae60" : q.s >= 50 ? "#f39c12" : "#e74c3c"}"></div></div>
+                <span class="quiz-score">${q.s}</span>
+              </div>`).join("") : '<p>Tiada rekod kuiz.</p>'}
+          </div>
+
+          <div class="section">
+            <h3>🔤 Kosa Kata Dikuasai (${(s.vocabulary || []).length} perkataan)</h3>
+            <div class="vocab">
+              ${(s.vocabulary || []).length ? s.vocabulary.map(w => `<span>${esc(w)}</span>`).join("") : '<span style="color:#999">Tiada perkataan dicatat</span>'}
+            </div>
+          </div>
+
+          <div class="footer">
+            Dihasilkan pada ${new Date().toLocaleDateString("ms-MY")} | ${esc(data.meta.schoolName)} — Program Bijak Membaca
+          </div>
+
+          <script>window.onload = () => window.print();<\/script>
+        </body>
+        </html>
+      `;
+
+      const win = window.open("", "_blank");
+      win.document.write(html);
+      win.document.close();
+    }
+  </script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(console.error);
+    }
   </script>
 </body>
 </html>

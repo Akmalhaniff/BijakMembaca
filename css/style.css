@@ -16,6 +16,35 @@
   --shadow: 0 1px 3px rgba(15, 23, 42, .08), 0 8px 24px rgba(15, 23, 42, .06);
 }
 
+html.dark {
+  --primary: #22d3ee;
+  --primary-dark: #67e8f9;
+  --primary-light: #164e63;
+  --accent: #fbbf24;
+  --accent-dark: #f59e0b;
+  --good: #4ade80;
+  --warn: #fbbf24;
+  --bad: #f87171;
+  --ink: #f1f5f9;
+  --muted: #94a3b8;
+  --bg: #0f172a;
+  --card: #1e293b;
+  --line: #334155;
+  --shadow: 0 1px 3px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.2);
+}
+
+header.site {
+  background: linear-gradient(120deg, #134e5e 0%, var(--primary-dark) 45%, var(--primary) 100%);
+}
+
+html.dark header.site {
+  background: linear-gradient(120deg, #164e63 0%, var(--primary-dark) 45%, var(--primary) 100%);
+}
+
+html.dark .hero {
+  background: linear-gradient(120deg, #164e63, #0e7490);
+}
+
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 html { scroll-behavior: smooth; }

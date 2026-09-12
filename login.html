@@ -58,6 +58,7 @@
         <h1>Program Bijak Membaca</h1>
         <p>Panel Guru — SMK Puncak Alam 3</p>
       </div>
+      <button class="btn ghost sm" data-dark-toggle style="position:absolute;top:16px;right:16px" aria-label="Tukar mod gelap/terang">🌙</button>
 
       <div class="tabs">
         <button class="tab active" data-tab="login">Log Masuk</button>
@@ -107,6 +108,7 @@
 
   <script src="js/data.js"></script>
   <script src="js/auth.js"></script>
+  <script src="js/darkmode.js"></script>
   <script>
     const loginForm = document.getElementById("loginForm");
     const registerForm = document.getElementById("registerForm");
@@ -171,6 +173,11 @@
 
     if (getCurrentUser()) {
       window.location.href = "admin.html";
+    }
+  </script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(console.error);
     }
   </script>
 </body>
