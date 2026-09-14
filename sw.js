@@ -1,4 +1,4 @@
-const CACHE_NAME = 'bijak-membaca-v1';
+const CACHE_NAME = 'bijak-membaca-v2';
 const STATIC_ASSETS = [
   './',
   './index.html',
@@ -34,23 +34,19 @@ self.addEventListener('activate', e => {
 
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
-  
+
   // Skip non-GET requests
   if (e.request.method !== 'GET') return;
-  
-  // Skip Firebase API calls - let them go through
-  if (url.hostname === 'firestore.googleapis.com' || url.hostname === 'identitytoolkit.googleapis.com' || url.hostname === 'securetoken.googleapis.com') {
-    return;
-  }
-  
-  // Cache-first for static assets
-  e.respondWith(cacheFirst(e.request));
+
+  // Only handle our own origin — let Firebase APIs, SDKs and fonts go through
+  if (url.origin !== self.location.origin) return;
+
+  // Network-first: fresh code when online, cached copy when offline.
+  // (Old cache-first strategy is what forced hard refreshes after each deploy.)
+  e.respondWith(networkFirst(e.request));
 });
 
-async function cacheFirst(request) {
-  const cached = await caches.match(request);
-  if (cached) return cached;
-  
+async function networkFirst(request) {
   try {
     const response = await fetch(request);
     if (response.ok) {
@@ -59,6 +55,8 @@ async function cacheFirst(request) {
     }
     return response;
   } catch (err) {
+    const cached = await caches.match(request);
+    if (cached) return cached;
     return new Response('Offline', { status: 503 });
   }
 }

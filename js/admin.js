@@ -1,4 +1,4 @@
-import { loadData, saveData, sbmToast, downloadJSON, classesOf, attendanceStats, levelIndex, quizAvg, checkLevelUp, esc, fmtDate, uid, defaultData, getCurrentUser, onAuthChange } from './data.js';
+import { loadData, saveData, sbmToast, downloadJSON, classesOf, attendanceStats, levelIndex, quizAvg, checkLevelUp, esc, fmtDate, uid, defaultData, getCurrentUser, onAuthChange, isSuperAdmin } from './data.js';
 
 let DATA = null;
 let filterClass = "";
@@ -647,6 +647,17 @@ async function init(user) {
   document.getElementById("adminMain").style.display = "block";
   const nameEl = document.getElementById("userName");
   if (nameEl && user) nameEl.textContent = user.displayName || user.email;
+  if (isSuperAdmin(user)) {
+    const bar = document.querySelector("#adminMain .adminbar");
+    if (bar && !document.getElementById("superBanner")) {
+      const div = document.createElement("div");
+      div.id = "superBanner";
+      div.className = "card";
+      div.style.cssText = "margin-bottom:12px;border:2px solid var(--accent);background:#fffbeb;color:#78350d;font-weight:600";
+      div.textContent = "👑 Mod Superadmin — anda melihat murid SEMUA guru. Edit disimpan ke dokumen guru masing-masing.";
+      bar.before(div);
+    }
+  }
   renderSettings();
   fillClassFilter();
   renderTable();

@@ -42,9 +42,12 @@ Pergi ke **Firestore Database** → **Rules** → Gantikan dengan:
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Guru hanya boleh baca/tulis data mereka sendiri
+    function isSuperAdmin() {
+      return request.auth != null && request.auth.token.email == 'akmalhanif1997@gmail.com';
+    }
+    // Guru hanya boleh baca/tulis data mereka sendiri (superadmin boleh semua)
     match /teachers/{teacherId} {
-      allow read, write: if request.auth != null && request.auth.uid == teacherId;
+      allow read, write: if (request.auth != null && request.auth.uid == teacherId) || isSuperAdmin();
     }
     // Pengguna boleh baca profil mereka sendiri
     match /users/{userId} {

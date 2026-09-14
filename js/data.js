@@ -19,6 +19,15 @@ const DATA_KEY = "sbm_data";
 const PIN_KEY = "sbm_pin";
 const DEFAULT_PIN = "1122";
 
+// Superadmin emails — can view/edit ALL teachers' data.
+// Passwords are managed by Firebase Auth, never stored here.
+const SUPERADMIN_EMAILS = ["akmalhanif1997@gmail.com"];
+
+export function isSuperAdmin(user) {
+  const u = user || auth.currentUser;
+  return !!u && !!u.email && SUPERADMIN_EMAILS.includes(u.email.toLowerCase());
+}
+
 export function getCurrentTeacherId() {
   const user = auth.currentUser;
   return user ? user.uid : null;
@@ -67,7 +76,16 @@ function loadLocal() {
 export async function loadData() {
   const teacherId = getCurrentTeacherId();
   if (!teacherId) return addTeacherIdToStudents(defaultData(), null);
-  
+
+  // Superadmin sees every teacher's students
+  if (isSuperAdmin()) {
+    try {
+      return await loadAllData();
+    } catch (e) {
+      console.error("loadData (superadmin) error:", e);
+    }
+  }
+
   try {
     const snap = await getDoc(doc(db, "teachers", teacherId));
     if (snap.exists()) {
@@ -128,7 +146,21 @@ export async function saveData(data) {
     sbmToast("Tiada guru aktif. Sila log masuk semula.");
     return;
   }
-  
+
+  // Superadmin: write each teacher's students back to their own doc,
+  // so editing another teacher's student doesn't move it to your doc.
+  // Each teacher's own settings (meta) are preserved.
+  if (isSuperAdmin()) {
+    try {
+      await saveAllTeachersData(data, teacherId);
+      console.log("Bijak: data semua guru disimpan ke Firestore.");
+    } catch (err) {
+      console.error("Bijak save error:", err);
+      sbmToast("Simpan gagal: " + err.message);
+    }
+    return;
+  }
+
   try {
     await setDoc(doc(db, "teachers", teacherId), {
       ...data,
@@ -138,6 +170,30 @@ export async function saveData(data) {
   } catch (err) {
     console.error("Bijak save error:", err);
     sbmToast("Simpan gagal: " + err.message);
+  }
+}
+
+async function saveAllTeachersData(data, superadminId) {
+  const byTeacher = {};
+  (data.students || []).forEach(s => {
+    const tid = s.teacherId || superadminId;
+    if (!byTeacher[tid]) byTeacher[tid] = [];
+    byTeacher[tid].push({ ...s, teacherId: tid });
+  });
+
+  const teachersSnap = await getDocs(collection(db, "teachers"));
+  const allIds = new Set(teachersSnap.docs.map(d => d.id));
+  Object.keys(byTeacher).forEach(tid => allIds.add(tid));
+
+  for (const tid of allIds) {
+    const ref = doc(db, "teachers", tid);
+    const snap = await getDoc(ref);
+    const base = snap.exists() ? snap.data() : {};
+    await setDoc(ref, {
+      meta: base.meta || data.meta,
+      students: byTeacher[tid] || [],
+      updatedAt: serverTimestamp()
+    }, { merge: true });
   }
 }
 
