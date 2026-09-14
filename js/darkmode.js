@@ -7,6 +7,7 @@ function initDarkMode() {
   const isDark = saved ? saved === "true" : prefersDark;
   document.documentElement.classList.toggle("dark", isDark);
   updateDarkModeToggle(isDark);
+  attachToggleListeners();
 }
 
 function toggleDarkMode() {
@@ -25,13 +26,11 @@ function updateDarkModeToggle(isDark) {
   });
 }
 
-function createDarkModeToggle() {
-  const btn = document.createElement("button");
-  btn.className = "btn ghost sm";
-  btn.setAttribute("data-dark-toggle", "");
-  btn.setAttribute("aria-label", "Tukar mod gelap/terang");
-  btn.addEventListener("click", toggleDarkMode);
-  return btn;
+function attachToggleListeners() {
+  document.querySelectorAll("[data-dark-toggle]").forEach(btn => {
+    btn.removeEventListener("click", toggleDarkMode);
+    btn.addEventListener("click", toggleDarkMode);
+  });
 }
 
 if (document.readyState === "loading") {
