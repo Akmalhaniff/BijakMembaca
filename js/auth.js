@@ -2,9 +2,7 @@ const AUTH_KEY = "sbm_auth";
 const USERS_KEY = "sbm_users";
 
 function apiHeaders() {
-  const h = { "Content-Type": "application/json" };
-  if (API_TOKEN) h["Authorization"] = "Bearer " + API_TOKEN;
-  return h;
+  return { "Content-Type": "application/json" };
 }
 
 function getCurrentUser() {
@@ -38,19 +36,13 @@ function saveUsers(users) {
 async function fetchUsersFromSheet() {
   if (!API_URL) return null;
   try {
-    const res = await fetch(API_URL + "?sheet=users", { headers: apiHeaders() });
+    const res = await fetch(API_URL + "?action=getUsers", { headers: apiHeaders() });
     if (res.ok) {
-      const rows = await res.json();
-      if (Array.isArray(rows)) {
-        const users = rows.map(r => ({
-          id: r.id,
-          email: r.email,
-          password: r.password,
-          name: r.name,
-          createdAt: r.createdAt
-        })).filter(u => u.id && u.email && u.password);
-        saveUsers(users);
-        return users;
+      const users = await res.json();
+      if (Array.isArray(users)) {
+        const validUsers = users.filter(u => u.id && u.email && u.password);
+        saveUsers(validUsers);
+        return validUsers;
       }
     }
   } catch (e) {}
@@ -59,18 +51,12 @@ async function fetchUsersFromSheet() {
 
 async function saveUserToSheet(user) {
   if (!API_URL) return;
-  const row = {
-    id: user.id,
-    email: user.email,
-    password: user.password,
-    name: user.name,
-    createdAt: user.createdAt
-  };
+  const payload = { action: "saveUser", user: user };
   try {
-    await fetch(API_URL + "?sheet=users", {
+    await fetch(API_URL, {
       method: "POST",
       headers: apiHeaders(),
-      body: JSON.stringify({ data: [row] })
+      body: JSON.stringify(payload)
     });
   } catch (e) {
     console.error("Failed to save user to sheet:", e);

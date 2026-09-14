@@ -2,8 +2,8 @@ const DATA_KEY = "sbm_data";
 const PIN_KEY = "sbm_pin";
 const DEFAULT_PIN = "1122";
 
-const API_URL = "https://sheetdb.io/api/v1/kfmmn2ga7vbv6azoxf4ondi1ph3c0ak6qu9amvxw";
-const API_TOKEN = "5fzbpnbsld7plgkd3x3um2jt6fgn9hzloqvk8nd9";
+const API_URL = "https://script.google.com/macros/s/AKfycbzfv0GOLR_wPwQZ6Q_13Na_CfC9IT9Onc0UH4LfMPueuQG1vZhEmhHEbbLPUP-WpAKzuQ/exec";
+const API_TOKEN = "";
 
 function getCurrentTeacherId() {
   const user = getCurrentUser ? getCurrentUser() : null;
@@ -31,9 +31,7 @@ function addTeacherIdToStudents(data, teacherId) {
 }
 
 function apiHeaders() {
-  const h = { "Content-Type": "application/json" };
-  if (API_TOKEN) h["Authorization"] = "Bearer " + API_TOKEN;
-  return h;
+  return { "Content-Type": "application/json" };
 }
 
 function defaultData() {
@@ -69,18 +67,15 @@ function loadLocal() {
 async function loadData() {
   if (API_URL) {
     try {
-      const res = await fetch(API_URL, { headers: apiHeaders() });
+      const res = await fetch(API_URL + "?action=getData", { headers: apiHeaders() });
       if (res.ok) {
-        const rows = await res.json();
-        if (Array.isArray(rows) && rows.length && rows[0].payload) {
-          const data = JSON.parse(rows[0].payload);
-          if (data && Array.isArray(data.students)) {
-            const teacherId = getCurrentTeacherId();
-            const filtered = filterStudentsByTeacher(data, teacherId);
-            const withTeacherId = addTeacherIdToStudents(filtered, teacherId);
-            localStorage.setItem(DATA_KEY, JSON.stringify(withTeacherId));
-            return withTeacherId;
-          }
+        const data = await res.json();
+        if (data && Array.isArray(data.students)) {
+          const teacherId = getCurrentTeacherId();
+          const filtered = filterStudentsByTeacher(data, teacherId);
+          const withTeacherId = addTeacherIdToStudents(filtered, teacherId);
+          localStorage.setItem(DATA_KEY, JSON.stringify(withTeacherId));
+          return withTeacherId;
         }
       }
     } catch (e) {}
@@ -130,12 +125,9 @@ async function saveData(data) {
 
   let globalData = data;
   try {
-    const res = await fetch(API_URL, { headers: apiHeaders() });
+    const res = await fetch(API_URL + "?action=getData", { headers: apiHeaders() });
     if (res.ok) {
-      const rows = await res.json();
-      if (Array.isArray(rows) && rows.length && rows[0].payload) {
-        globalData = JSON.parse(rows[0].payload);
-      }
+      globalData = await res.json();
     }
   } catch (e) {}
 
@@ -145,20 +137,19 @@ async function saveData(data) {
     students: [...otherStudents, ...(data.students || [])]
   };
 
-  const row = JSON.stringify({ payload: JSON.stringify(mergedData) });
-  fetch(API_URL + "/all", { method: "DELETE", headers: apiHeaders() })
-    .then(() => fetch(API_URL, {
-      method: "POST",
-      headers: apiHeaders(),
-      body: row
-    }))
+  const payload = { action: "saveData", payload: mergedData };
+  fetch(API_URL, {
+    method: "POST",
+    headers: apiHeaders(),
+    body: JSON.stringify(payload)
+  })
     .then(async r => {
       if (!r.ok) {
         const txt = await r.text();
         console.error("Bijak save gagal:", r.status, txt);
-        sbmToast("Simpan gagal (" + r.status + "). Semak API_URL SheetDB.");
+        sbmToast("Simpan gagal (" + r.status + "). Semak API_URL.");
       } else {
-        console.log("Bijak: data disimpan ke SheetDB.");
+        console.log("Bijak: data disimpan ke Google Sheets.");
       }
     })
     .catch(err => {
