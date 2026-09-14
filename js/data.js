@@ -2,13 +2,8 @@ const DATA_KEY = "sbm_data";
 const PIN_KEY = "sbm_pin";
 const DEFAULT_PIN = "1122";
 
-/* ---- Google Sheets backend via SheetDB (no Google login needed) ----
-   Create an API at https://sheetdb.io from a Google Sheet, then paste the
-   API URL (https://sheetdb.io/api/v1/xxxx) into API_URL.
-   The whole app data is stored as one row in a "payload" column.
-   Optional: enable an auth token in SheetDB settings and paste it in API_TOKEN. */
-const API_URL = "https://sheetdb.io/api/v1/pmny4gh9q0k6n";
-const API_TOKEN = "";
+const API_URL = "https://sheetdb.io/api/v1/kfmmn2ga7vbv6azoxf4ondi1ph3c0ak6qu9amvxw";
+const API_TOKEN = "5fzbpnbsld7plgkd3x3um2jt6fgn9hzloqvk8nd9";
 
 function getCurrentTeacherId() {
   const user = getCurrentUser ? getCurrentUser() : null;
