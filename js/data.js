@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { getFirestore, collection, doc, getDoc, setDoc, query, where, getDocs, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -19,7 +19,7 @@ const DATA_KEY = "sbm_data";
 const PIN_KEY = "sbm_pin";
 const DEFAULT_PIN = "1122";
 
-function getCurrentTeacherId() {
+export function getCurrentTeacherId() {
   const user = auth.currentUser;
   return user ? user.uid : null;
 }
@@ -34,7 +34,7 @@ function addTeacherIdToStudents(data, teacherId) {
   return { ...data, students: (data.students || []).map(s => ({ ...s, teacherId: s.teacherId || teacherId })) };
 }
 
-function defaultData() {
+export function defaultData() {
   if (typeof STUDENT_DATA !== "undefined") {
     return JSON.parse(JSON.stringify(STUDENT_DATA));
   }
@@ -64,7 +64,7 @@ function loadLocal() {
   return null;
 }
 
-async function loadData() {
+export async function loadData() {
   const teacherId = getCurrentTeacherId();
   if (!teacherId) return addTeacherIdToStudents(defaultData(), null);
   
@@ -107,7 +107,7 @@ export async function loadAllData() {
   }
 }
 
-function sbmToast(msg) {
+export function sbmToast(msg) {
   let el = document.getElementById("sbmToast");
   if (!el) {
     el = document.createElement("div");
@@ -121,7 +121,7 @@ function sbmToast(msg) {
   el._t = setTimeout(() => { el.style.display = "none"; }, 6000);
 }
 
-async function saveData(data) {
+export async function saveData(data) {
   localStorage.setItem(DATA_KEY, JSON.stringify(data));
   const teacherId = getCurrentTeacherId();
   if (!teacherId) {
@@ -158,7 +158,20 @@ export async function loginUser(email, password) {
     const cred = await signInWithEmailAndPassword(auth, email, password);
     return { id: cred.user.uid, email: cred.user.email, name: cred.user.displayName || 'Guru' };
   } catch (err) {
-    if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') throw new Error("Email atau kata laluan salah");
+    if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential' || err.code === 'auth/invalid-email') throw new Error("Email atau kata laluan salah");
+    throw err;
+  }
+}
+
+export async function loginWithGoogle() {
+  try {
+    const provider = new GoogleAuthProvider();
+    const cred = await signInWithPopup(auth, provider);
+    return { id: cred.user.uid, email: cred.user.email, name: cred.user.displayName || 'Guru' };
+  } catch (err) {
+    if (err.code === 'auth/popup-closed-by-user' || err.code === 'auth/cancelled-popup-request') throw new Error("Log masuk dibatalkan");
+    if (err.code === 'auth/operation-not-allowed') throw new Error("Log masuk Google belum diaktifkan dalam Firebase");
+    if (err.code === 'auth/unauthorized-domain') throw new Error("Domain ini belum dibenarkan dalam Firebase Auth");
     throw err;
   }
 }

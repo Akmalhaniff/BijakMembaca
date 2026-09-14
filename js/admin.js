@@ -1,4 +1,4 @@
-import { loadData, saveData, downloadJSON, classesOf, attendanceStats, levelIndex, quizAvg, checkLevelUp, esc, fmtDate, uid, defaultData, syncLevelNames, getCurrentUser } from './data.js';
+import { loadData, saveData, sbmToast, downloadJSON, classesOf, attendanceStats, levelIndex, quizAvg, checkLevelUp, esc, fmtDate, uid, defaultData, getCurrentUser, onAuthChange } from './data.js';
 
 let DATA = null;
 let filterClass = "";
@@ -283,7 +283,7 @@ function openEditor(id) {
 }
 
 function newStudent() {
-  const teacherId = getCurrentUser ? getCurrentUser().id : null;
+  const teacherId = getCurrentUser ? getCurrentUser().uid : null;
   editing = {
     id: uid("s"),
     name: "",
@@ -442,7 +442,7 @@ function wireAdmin() {
       const text = await f.text();
       const data = JSON.parse(text);
       if (!data || !Array.isArray(data.students)) throw new Error("format");
-      const teacherId = getCurrentUser ? getCurrentUser().id : null;
+      const teacherId = getCurrentUser ? getCurrentUser().uid : null;
       if (teacherId) {
         data.students = data.students.map(s => ({ ...s, teacherId }));
       }
@@ -468,7 +468,7 @@ function wireAdmin() {
         alert("Ralat CSV: " + result.errors.map(e => e.message).join(", "));
         return;
       }
-      const teacherId = getCurrentUser ? getCurrentUser().id : null;
+      const teacherId = getCurrentUser ? getCurrentUser().uid : null;
       const imported = result.data.map((row, i) => ({
         id: uid("s"),
         name: (row.nama || row.name || "").trim(),
@@ -642,19 +642,21 @@ function printStudentReport(s) {
   win.document.close();
 }
 
-async function init() {
-  const user = getCurrentUser();
-  if (!user) {
-    window.location.href = "login.html";
-    return;
-  }
-  
+async function init(user) {
   DATA = await loadData();
   document.getElementById("adminMain").style.display = "block";
+  const nameEl = document.getElementById("userName");
+  if (nameEl && user) nameEl.textContent = user.displayName || user.email;
   renderSettings();
   fillClassFilter();
   renderTable();
   wireAdmin();
 }
 
-init();
+onAuthChange((user) => {
+  if (!user) {
+    window.location.href = "login.html";
+    return;
+  }
+  init(user);
+});
