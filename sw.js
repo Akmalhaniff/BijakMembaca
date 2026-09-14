@@ -1,26 +1,29 @@
 const CACHE_NAME = 'bijak-membaca-v1';
+
+// Use relative paths for GitHub Pages subdirectory support
 const STATIC_ASSETS = [
-  '/',
-  '/index.html',
-  '/admin.html',
-  '/login.html',
-  '/parent.html',
-  '/css/style.css',
-  '/js/app.js',
-  '/js/admin.js',
-  '/js/data.js',
-  '/js/auth.js',
-  '/js/darkmode.js',
-  '/js/sample.js',
-  '/js/lib/papaparse.min.js',
-  '/data/students.json'
+  './',
+  './index.html',
+  './admin.html',
+  './login.html',
+  './parent.html',
+  './css/style.css',
+  './js/app.js',
+  './js/admin.js',
+  './js/data.js',
+  './js/auth.js',
+  './js/darkmode.js',
+  './js/sample.js',
+  './js/lib/papaparse.min.js',
+  './data/students.json'
 ];
 
 self.addEventListener('install', e => {
   e.waitUntil(
     caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(STATIC_ASSETS))
+      .then(cache => cache.addAll(STATIC_ASSETS.map(url => new Request(url, { credentials: 'same-origin' }))))
       .then(() => self.skipWaiting())
+      .catch(err => console.warn('SW install: some assets failed to cache', err))
   );
 });
 
@@ -80,17 +83,4 @@ async function networkFirst(request) {
       headers: { 'Content-Type': 'application/json' }
     });
   }
-}
-
-// Background sync for offline data
-self.addEventListener('sync', e => {
-  if (e.tag === 'sync-data') {
-    e.waitUntil(syncPendingData());
-  }
-});
-
-async function syncPendingData() {
-  // This would sync any pending changes when back online
-  // Implementation depends on how you store pending changes
-  console.log('Syncing pending data...');
 }
