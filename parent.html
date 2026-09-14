@@ -76,10 +76,12 @@
     © <span id="footYear"></span> <b>SMK Puncak Alam 3</b> — Program Bijak Membaca
   </footer>
 
-  <script src="js/sample.js"></script>
-  <script src="js/data.js"></script>
-  <script src="js/darkmode.js"></script>
-  <script>
+  <script type="module" src="js/sample.js"></script>
+  <script type="module" src="js/data.js"></script>
+  <script type="module" src="js/darkmode.js"></script>
+  <script type="module">
+    import { loadAllData, attendanceStats, levelIndex, quizAvg, checkLevelUp, fmtDate, esc, programStats, classesOf, levelName, pct, defaultData, downloadJSON } from './js/data.js';
+    
     function getStudentIdFromUrl() {
       const params = new URLSearchParams(window.location.search);
       return params.get("student");
@@ -169,7 +171,7 @@
         return;
       }
 
-      const data = await loadData();
+      const data = await loadAllData();
       document.getElementById("schoolName").textContent = data.meta.schoolName;
       document.getElementById("programName").textContent = data.meta.programName;
       document.getElementById("programDesc").textContent = data.meta.programName;
@@ -186,42 +188,36 @@
 
     init();
   </script>
-  <script>
-    document.getElementById("printBtn")?.addEventListener("click", () => {
+  <script type="module">
+    import { loadAllData, attendanceStats, levelIndex, quizAvg } from './js/data.js';
+
+    document.getElementById("printBtn")?.addEventListener("click", async () => {
       const studentId = new URLSearchParams(window.location.search).get("student");
       if (!studentId) return;
-      fetch(`js/data.js`).then(() => {
-        const script = document.createElement("script");
-        script.src = "js/data.js";
-        document.head.appendChild(script);
-        script.onload = () => {
-          loadData().then(data => {
-            const student = data.students.find(s => s.id === studentId);
-            if (student) printStudentReport(student, data);
-          });
-        };
-      });
+      const data = await loadAllData();
+      const student = data.students.find(s => s.id === studentId);
+      if (student) printStudentReport(student, data);
     });
 
-    document.getElementById("whatsappBtn")?.addEventListener("click", () => {
+    document.getElementById("whatsappBtn")?.addEventListener("click", async () => {
       const studentId = new URLSearchParams(window.location.search).get("student");
       if (!studentId) return;
-      loadData().then(data => {
-        const student = data.students.find(s => s.id === studentId);
-        if (!student) return;
-        const url = window.location.href;
-        const text = encodeURIComponent(
-          `📚 *Laporan Kemajuan ${student.name}*\n` +
-          `Kelas: ${student.class}\n` +
-          `Tahap: ${data.meta.levels[levelIndex(data, student)].name}\n` +
-          `Kehadiran: ${attendanceStats(student).pct}%\n` +
-          `Purata Kuiz: ${quizAvg(student)}/100\n\n` +
-          `Lihat penuh: ${url}\n` +
-          `_Program Bijak Membaca - ${data.meta.schoolName}_`
-        );
-        window.open(`https://wa.me/?text=${text}`, "_blank");
-      });
+      const data = await loadAllData();
+      const student = data.students.find(s => s.id === studentId);
+      if (!student) return;
+      const url = window.location.href;
+      const text = encodeURIComponent(
+        `📚 *Laporan Kemajuan ${student.name}*\n` +
+        `Kelas: ${student.class}\n` +
+        `Tahap: ${data.meta.levels[levelIndex(data, student)].name}\n` +
+        `Kehadiran: ${attendanceStats(student).pct}%\n` +
+        `Purata Kuiz: ${quizAvg(student)}/100\n\n` +
+        `Lihat penuh: ${url}\n` +
+        `_Program Bijak Membaca - ${data.meta.schoolName}_`
+      );
+      window.open(`https://wa.me/?text=${text}`, "_blank");
     });
+  </script>
 
     function printStudentReport(s, data) {
       const att = attendanceStats(s);

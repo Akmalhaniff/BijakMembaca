@@ -1,3 +1,5 @@
+import { loadData, programStats, classesOf, attendanceStats, levelIndex, quizAvg, checkLevelUp, esc, fmtDate } from './data.js';
+
 let DATA = null;
 let filterClass = "";
 let filterText = "";

@@ -1,37 +1,37 @@
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getFirestore, collection, doc, getDoc, setDoc, query, where, getDocs, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDXrS3hDm-DUoh6Lg1ARJ0gGXc1kgb44Ok",
+  authDomain: "bijak-membaca.firebaseapp.com",
+  projectId: "bijak-membaca",
+  storageBucket: "bijak-membaca.firebasestorage.app",
+  messagingSenderId: "867240112493",
+  appId: "1:867240112493:web:3dc02db164fc896959ea64"
+};
+
+const app = initializeApp(firebaseConfig);
+export const auth = getAuth(app);
+export const db = getFirestore(app);
+
 const DATA_KEY = "sbm_data";
 const PIN_KEY = "sbm_pin";
 const DEFAULT_PIN = "1122";
 
-const API_URL = "https://script.google.com/macros/s/AKfycbzfv0GOLR_wPwQZ6Q_13Na_CfC9IT9Onc0UH4LfMPueuQG1vZhEmhHEbbLPUP-WpAKzuQ/exec";
-const API_TOKEN = "";
-
 function getCurrentTeacherId() {
-  const user = getCurrentUser ? getCurrentUser() : null;
-  return user ? user.id : null;
+  const user = auth.currentUser;
+  return user ? user.uid : null;
 }
 
 function filterStudentsByTeacher(data, teacherId) {
   if (!teacherId) return data;
-  const filtered = {
-    ...data,
-    students: (data.students || []).filter(s => s.teacherId === teacherId)
-  };
-  return filtered;
+  return { ...data, students: (data.students || []).filter(s => s.teacherId === teacherId) };
 }
 
 function addTeacherIdToStudents(data, teacherId) {
   if (!teacherId) return data;
-  return {
-    ...data,
-    students: (data.students || []).map(s => ({
-      ...s,
-      teacherId: s.teacherId || teacherId
-    }))
-  };
-}
-
-function apiHeaders() {
-  return { "Content-Type": "application/json" };
+  return { ...data, students: (data.students || []).map(s => ({ ...s, teacherId: s.teacherId || teacherId })) };
 }
 
 function defaultData() {
@@ -65,38 +65,46 @@ function loadLocal() {
 }
 
 async function loadData() {
-  if (API_URL) {
-    try {
-      const res = await fetch(API_URL + "?action=getData", { headers: apiHeaders() });
-      if (res.ok) {
-        const data = await res.json();
-        if (data && Array.isArray(data.students)) {
-          const teacherId = getCurrentTeacherId();
-          const filtered = filterStudentsByTeacher(data, teacherId);
-          const withTeacherId = addTeacherIdToStudents(filtered, teacherId);
-          localStorage.setItem(DATA_KEY, JSON.stringify(withTeacherId));
-          return withTeacherId;
-        }
-      }
-    } catch (e) {}
-  }
-  const local = loadLocal();
-  if (local && Array.isArray(local.students)) {
-    const teacherId = getCurrentTeacherId();
-    return addTeacherIdToStudents(filterStudentsByTeacher(local, teacherId), teacherId);
-  }
+  const teacherId = getCurrentTeacherId();
+  if (!teacherId) return addTeacherIdToStudents(defaultData(), null);
+  
   try {
-    const res = await fetch("data/students.json");
-    if (res.ok) {
-      const data = await res.json();
-      if (data && Array.isArray(data.students)) {
-        const teacherId = getCurrentTeacherId();
-        return addTeacherIdToStudents(filterStudentsByTeacher(data, teacherId), teacherId);
+    const snap = await getDoc(doc(db, "teachers", teacherId));
+    if (snap.exists()) {
+      const data = snap.data();
+      return addTeacherIdToStudents(filterStudentsByTeacher(data, teacherId), teacherId);
+    }
+  } catch (e) {
+    console.error("loadData error:", e);
+  }
+  return addTeacherIdToStudents(defaultData(), teacherId);
+}
+
+// Load all data (for parent view - no teacher filter)
+export async function loadAllData() {
+  try {
+    const teachersSnap = await getDocs(collection(db, "teachers"));
+    const allStudents = [];
+    let meta = null;
+    
+    for (const docSnap of teachersSnap.docs) {
+      const data = docSnap.data();
+      if (data && data.students) {
+        data.students.forEach(s => {
+          allStudents.push({ ...s, teacherId: docSnap.id });
+        });
+      }
+      if (!meta && data && data.meta) {
+        meta = data.meta;
       }
     }
-  } catch (e) {}
-  const teacherId = getCurrentTeacherId();
-  return addTeacherIdToStudents(defaultData(), teacherId);
+    
+    if (allStudents.length === 0) return defaultData();
+    return { meta: meta || defaultData().meta, students: allStudents };
+  } catch (e) {
+    console.error("loadAllData error:", e);
+    return defaultData();
+  }
 }
 
 function sbmToast(msg) {
@@ -115,85 +123,107 @@ function sbmToast(msg) {
 
 async function saveData(data) {
   localStorage.setItem(DATA_KEY, JSON.stringify(data));
-  if (!API_URL) return;
-  
   const teacherId = getCurrentTeacherId();
   if (!teacherId) {
     sbmToast("Tiada guru aktif. Sila log masuk semula.");
     return;
   }
-
-  let globalData = data;
+  
   try {
-    const res = await fetch(API_URL + "?action=getData", { headers: apiHeaders() });
-    if (res.ok) {
-      globalData = await res.json();
-    }
-  } catch (e) {}
-
-  const otherStudents = (globalData.students || []).filter(s => s.teacherId !== teacherId);
-  const mergedData = {
-    ...globalData,
-    students: [...otherStudents, ...(data.students || [])]
-  };
-
-  const payload = { action: "saveData", payload: mergedData };
-  fetch(API_URL, {
-    method: "POST",
-    headers: apiHeaders(),
-    body: JSON.stringify(payload)
-  })
-    .then(async r => {
-      if (!r.ok) {
-        const txt = await r.text();
-        console.error("Bijak save gagal:", r.status, txt);
-        sbmToast("Simpan gagal (" + r.status + "). Semak API_URL.");
-      } else {
-        console.log("Bijak: data disimpan ke Google Sheets.");
-      }
-    })
-    .catch(err => {
-      console.error("Bijak save error:", err);
-      sbmToast("Simpan gagal: " + err.message);
-    });
+    await setDoc(doc(db, "teachers", teacherId), {
+      ...data,
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+    console.log("Bijak: data disimpan ke Firestore.");
+  } catch (err) {
+    console.error("Bijak save error:", err);
+    sbmToast("Simpan gagal: " + err.message);
+  }
 }
 
-function uid(prefix) {
+export async function registerUser(email, password, name) {
+  try {
+    const cred = await createUserWithEmailAndPassword(auth, email, password);
+    await updateProfile(cred.user, { displayName: name });
+    return { id: cred.user.uid, email: cred.user.email, name };
+  } catch (err) {
+    if (err.code === 'auth/email-already-in-use') throw new Error("Email sudah didaftarkan");
+    if (err.code === 'auth/weak-password') throw new Error("Kata laluan terlalu lemah");
+    throw err;
+  }
+}
+
+export async function loginUser(email, password) {
+  try {
+    const cred = await signInWithEmailAndPassword(auth, email, password);
+    return { id: cred.user.uid, email: cred.user.email, name: cred.user.displayName || 'Guru' };
+  } catch (err) {
+    if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') throw new Error("Email atau kata laluan salah");
+    throw err;
+  }
+}
+
+export function logoutUser() {
+  return signOut(auth);
+}
+
+export function onAuthChange(callback) {
+  return onAuthStateChanged(auth, callback);
+}
+
+export function getCurrentUser() {
+  return auth.currentUser;
+}
+
+export function uid(prefix) {
   return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }
 
-function classesOf(data) {
+export function classesOf(data) {
   const set = new Set((data.students || []).map(s => s.class).filter(Boolean));
   return Array.from(set).sort();
 }
 
-function pct(n, d) {
+export function pct(n, d) {
   if (!d) return 0;
   return Math.round((n / d) * 100);
 }
 
-function attendanceStats(s) {
+export function attendanceStats(s) {
   const total = s.attendance ? s.attendance.length : 0;
   const hadir = s.attendance ? s.attendance.filter(a => a.s === "h").length : 0;
   return { total, hadir, absent: total - hadir, pct: pct(hadir, total) };
 }
 
-function quizAvg(s) {
+export function quizAvg(s) {
   const qs = s.quizzes || [];
   if (!qs.length) return 0;
   return Math.round(qs.reduce((a, q) => a + q.s, 0) / qs.length);
 }
 
-function levelIndex(data, s) {
+export function levelIndex(data, s) {
   const idx = (s.currentLevel || 1) - 1;
   return Math.max(0, Math.min(idx, data.meta.levels.length - 1));
 }
 
-function levelName(data, s) {
+export function levelName(data, s) {
   return data.meta.levels[levelIndex(data, s)].name;
 }
 
-function checkLevelUp(data, s) {
+export function programStats(data) {
+  const students = data.students || [];
+  const total = students.length;
+  const totalLevels = data.meta.levels.length;
+  const sumLevel = students.reduce((a, s) => a + (levelIndex(data, s) + 1), 0);
+  const avgLevel = total ? Math.round((sumLevel / total) * 10) / 10 : 0;
+  const sumAtt = students.reduce((a, s) => a + attendanceStats(s).pct, 0);
+  const avgAtt = total ? Math.round(sumAtt / total) : 0;
+  const sumQuiz = students.reduce((a, s) => a + quizAvg(s), 0);
+  const avgQuiz = total ? Math.round(sumQuiz / total) : 0;
+  return { total, totalLevels, avgLevel, avgAtt, avgQuiz };
+}
+
+export function checkLevelUp(data, s) {
   const currentLevel = s.currentLevel || 1;
   const totalLevels = data.meta.levels.length;
   if (currentLevel >= totalLevels) return null;
@@ -214,20 +244,7 @@ function checkLevelUp(data, s) {
   };
 }
 
-function programStats(data) {
-  const students = data.students || [];
-  const total = students.length;
-  const totalLevels = data.meta.levels.length;
-  const sumLevel = students.reduce((a, s) => a + (levelIndex(data, s) + 1), 0);
-  const avgLevel = total ? Math.round((sumLevel / total) * 10) / 10 : 0;
-  const sumAtt = students.reduce((a, s) => a + attendanceStats(s).pct, 0);
-  const avgAtt = total ? Math.round(sumAtt / total) : 0;
-  const sumQuiz = students.reduce((a, s) => a + quizAvg(s), 0);
-  const avgQuiz = total ? Math.round(sumQuiz / total) : 0;
-  return { total, totalLevels, avgLevel, avgAtt, avgQuiz };
-}
-
-function downloadJSON(data, filename) {
+export function downloadJSON(data, filename) {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
@@ -237,7 +254,7 @@ function downloadJSON(data, filename) {
   setTimeout(() => URL.revokeObjectURL(a.href), 500);
 }
 
-function fmtDate(d) {
+export function fmtDate(d) {
   if (!d) return "";
   const parts = d.split("-");
   if (parts.length !== 3) return d;
@@ -245,7 +262,7 @@ function fmtDate(d) {
   return parts[2] + " " + months[parseInt(parts[1], 10) - 1] + " " + parts[0];
 }
 
-function esc(t) {
+export function esc(t) {
   const div = document.createElement("div");
   div.textContent = t == null ? "" : String(t);
   return div.innerHTML;

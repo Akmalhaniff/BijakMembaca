@@ -1,6 +1,4 @@
 const CACHE_NAME = 'bijak-membaca-v1';
-
-// Use relative paths for GitHub Pages subdirectory support
 const STATIC_ASSETS = [
   './',
   './index.html',
@@ -11,7 +9,6 @@ const STATIC_ASSETS = [
   './js/app.js',
   './js/admin.js',
   './js/data.js',
-  './js/auth.js',
   './js/darkmode.js',
   './js/sample.js',
   './js/lib/papaparse.min.js',
@@ -41,9 +38,8 @@ self.addEventListener('fetch', e => {
   // Skip non-GET requests
   if (e.request.method !== 'GET') return;
   
-  // Skip SheetDB API calls - always fetch fresh
-  if (url.hostname === 'sheetdb.io') {
-    e.respondWith(networkFirst(e.request));
+  // Skip Firebase API calls - let them go through
+  if (url.hostname === 'firestore.googleapis.com' || url.hostname === 'identitytoolkit.googleapis.com' || url.hostname === 'securetoken.googleapis.com') {
     return;
   }
   
@@ -64,23 +60,5 @@ async function cacheFirst(request) {
     return response;
   } catch (err) {
     return new Response('Offline', { status: 503 });
-  }
-}
-
-async function networkFirst(request) {
-  try {
-    const response = await fetch(request);
-    if (response.ok) {
-      const cache = await caches.open(CACHE_NAME);
-      cache.put(request, response.clone());
-    }
-    return response;
-  } catch (err) {
-    const cached = await caches.match(request);
-    if (cached) return cached;
-    return new Response(JSON.stringify({ error: 'Offline' }), {
-      status: 503,
-      headers: { 'Content-Type': 'application/json' }
-    });
   }
 }

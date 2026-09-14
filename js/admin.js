@@ -1,3 +1,5 @@
+import { loadData, saveData, downloadJSON, classesOf, attendanceStats, levelIndex, quizAvg, checkLevelUp, esc, fmtDate, uid, defaultData, syncLevelNames, getCurrentUser } from './data.js';
+
 let DATA = null;
 let filterClass = "";
 let editing = null;
@@ -389,7 +391,6 @@ function DOMLevelNames() {
 }
 
 function syncLevelNames() {
-  const short = n => "L" + (Math.min(n.length, 2));
   DATA.meta.levels.forEach((l, i) => {
     l.short = "L" + (i + 1);
   });
@@ -642,8 +643,11 @@ function printStudentReport(s) {
 }
 
 async function init() {
-  const user = requireAuth("login.html");
-  if (!user) return;
+  const user = getCurrentUser();
+  if (!user) {
+    window.location.href = "login.html";
+    return;
+  }
   
   DATA = await loadData();
   document.getElementById("adminMain").style.display = "block";
