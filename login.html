@@ -8,6 +8,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0e7490">
   <style>
     .auth-container {
       min-height: 100vh;
@@ -24,6 +26,7 @@
       border-radius: 16px;
       padding: 32px;
       box-shadow: var(--shadow);
+      position: relative;
     }
     .auth-header {
       text-align: center;
@@ -78,7 +81,7 @@
         <h1>Program Bijak Membaca</h1>
         <p>Panel Guru — SMK Puncak Alam 3</p>
       </div>
-      <button class="btn ghost sm" data-dark-toggle style="position:absolute;top:16px;right:16px" aria-label="Tukar mod gelap/terang"></button>
+      <button class="btn ghost sm" data-dark-toggle style="position:absolute;top:12px;right:12px;min-width:36px;justify-content:center" aria-label="Tukar mod gelap/terang"></button>
 
       <div class="tabs">
         <button class="tab active" data-tab="login">Log Masuk</button>

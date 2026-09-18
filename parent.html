@@ -8,6 +8,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0e7490">
   <style>
     .parent-hero { text-align:center; padding:24px 0 }
     .parent-hero .emblem { margin:0 auto 12px; background:linear-gradient(135deg,var(--primary),var(--accent)) }
@@ -20,24 +22,29 @@
     .stagelist .stage { display:flex; align-items:center; gap:10px; padding:10px; border-radius:10px; margin-bottom:8px; background:var(--bg) }
     .stagelist .stage.done { background:#ecfdf5; border:1px solid #a7f3d0 }
     .stagelist .stage.cur { background:#fef3c7; border:1px solid #fde68a }
-    .stagelist .stage.todo { background:var(--bg); border:1px solid var(--border) }
+    .stagelist .stage.todo { background:var(--bg); border:1px solid var(--line) }
     .stagelist .dot { width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:13px }
     .stagelist .stage.done .dot { background:var(--good); color:#fff }
     .stagelist .stage.cur .dot { background:var(--accent); color:#fff }
-    .stagelist .stage.todo .dot { background:var(--border); color:var(--muted) }
-    .attrow { display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--border) }
+    .stagelist .stage.todo .dot { background:var(--line); color:var(--muted) }
+    .attrow { display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--line) }
     .attrow:last-child { border-bottom:none }
     .attrow .st.hadir { color:var(--good); font-weight:600 }
     .attrow .st.tiada { color:var(--bad); font-weight:600 }
-    .quiz-row { display:flex; align-items:center; gap:12px; margin-bottom:10px }
-    .quiz-row .qt { flex:1; font-weight:600 }
-    .quiz-row .track { flex:2; height:8px; background:var(--bg); border-radius:4px; overflow:hidden }
+    .quiz-row { display:flex; align-items:center; gap:8px; margin-bottom:10px; min-width:0 }
+    .quiz-row .qt { flex:1; font-weight:600; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+    .quiz-row .track { flex:1 1 80px; height:8px; background:var(--bg); border-radius:4px; overflow:hidden; min-width:60px }
     .quiz-row .track i { display:block; height:100%; border-radius:4px }
-    .quiz-row .qs { width:50px; text-align:right; font-weight:700 }
+    .quiz-row .qs { width:44px; text-align:right; font-weight:700; flex:0 0 auto }
     .vocab-wrap { display:flex; flex-wrap:wrap; gap:6px }
     .vocab-wrap .tag { background:var(--primary-light); color:var(--primary-dark); padding:4px 10px; border-radius:999px; font-size:13px; font-weight:600 }
     .empty-state { text-align:center; padding:40px; color:var(--muted) }
     .empty-state .big { font-size:48px; margin-bottom:12px }
+    html.dark .stagelist .stage.done { background:#14532d; border-color:#166534 }
+    html.dark .stagelist .stage.cur { background:#78350d; border-color:#92400e }
+    html.dark .stagelist .stage.todo { background:var(--card); border-color:var(--line) }
+    html.dark .vocab-wrap .tag { background:#164e63; color:#67e8f9 }
+    @media (max-width:480px){ .student-header{ gap:12px; margin-bottom:16px } .student-header .avatar{ width:56px; height:56px; font-size:22px } .student-header h2{ font-size:19px } }
   </style>
 </head>
 <body>

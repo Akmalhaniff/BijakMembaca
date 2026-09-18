@@ -1,4 +1,13 @@
-import { loadData, programStats, classesOf, attendanceStats, levelIndex, quizAvg, checkLevelUp, esc, fmtDate } from './data.js';
+import { loadData, programStats, classesOf, attendanceStats, levelIndex, quizAvg, checkLevelUp, esc, fmtDate, onAuthChange, logoutUser } from './data.js';
+
+// Global logout delegation for dynamically created nav button
+document.addEventListener("click", async (e) => {
+  const btn = e.target.closest("[data-logout]");
+  if (!btn) return;
+  e.preventDefault();
+  try { await logoutUser(); } catch (err) { console.error(err); }
+  window.location.href = "index.html";
+});
 
 let DATA = null;
 let filterClass = "";
@@ -81,6 +90,46 @@ function renderClasses() {
   });
 }
 
+function renderCharts() {
+  if (typeof Chart === 'undefined' || !DATA) return;
+  const isDark = document.documentElement.classList.contains('dark');
+  const grid = isDark ? '#334155' : '#e2e8f0';
+  const ink = isDark ? '#f1f5f9' : '#0f172a';
+  Chart.defaults.color = ink;
+  Chart.defaults.borderColor = grid;
+  // Level distribution
+  const levelCounts = DATA.meta.levels.map(() => 0);
+  DATA.students.forEach(s => { levelCounts[levelIndex(DATA, s)]++; });
+  const lc = document.getElementById('levelChart');
+  if (lc) {
+    if (lc._chart) lc._chart.destroy();
+    lc._chart = new Chart(lc, {
+      type: 'bar',
+      data: {
+        labels: DATA.meta.levels.map(l => l.short),
+        datasets: [{ label: 'Murid', data: levelCounts, backgroundColor: '#0e7490', borderRadius: 6 }]
+      },
+      options: { responsive: true, plugins: { legend: { display: false }, title: { display: true, text: 'Taburan Tahap Bacaan' } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+    });
+  }
+  // Attendance buckets
+  const buckets = ['0-49%', '50-69%', '70-89%', '90-100%'];
+  const attCounts = [0,0,0,0];
+  DATA.students.forEach(s => {
+    const p = attendanceStats(s).pct;
+    if (p < 50) attCounts[0]++; else if (p < 70) attCounts[1]++; else if (p < 90) attCounts[2]++; else attCounts[3]++;
+  });
+  const ac = document.getElementById('attChart');
+  if (ac) {
+    if (ac._chart) ac._chart.destroy();
+    ac._chart = new Chart(ac, {
+      type: 'doughnut',
+      data: { labels: buckets, datasets: [{ data: attCounts, backgroundColor: ['#dc2626','#d97706','#16a34a','#0e7490'] }] },
+      options: { responsive: true, plugins: { title: { display: true, text: 'Taburan Kehadiran' }, legend: { position: 'bottom' } } }
+    });
+  }
+}
+
 function renderLevelsDesc() {
   const lv = DATA.meta.levels;
   document.getElementById("levelsDesc").innerHTML = `
@@ -88,7 +137,7 @@ function renderLevelsDesc() {
       ${lv.map((l, i) => `
         <div class="stage">
           <div class="dot">${i + 1}</div>
-          <div class="lname">${esc(l.name)}</div>
+          <div class="lname">${esc(l.name)}${l.material ? ` <a href="${esc(l.material)}" target="_blank" style="font-size:11px;color:var(--primary);margin-left:6px">📎 Bahan</a>` : ''}</div>
         </div>`).join("")}
     </div>`;
 }
@@ -175,7 +224,28 @@ function closeModal() {
   document.getElementById("modalBg").classList.remove("open");
 }
 
+function updateAuthNav(user) {
+  document.querySelectorAll("[data-auth='user']").forEach(el => el.style.display = user ? "" : "none");
+  document.querySelectorAll("[data-auth='guest']").forEach(el => el.style.display = user ? "none" : "");
+  const right = document.getElementById("navRight");
+  if (!right) return;
+  let navUser = document.getElementById("navUser");
+  if (user && !navUser) {
+    navUser = document.createElement("span");
+    navUser.id = "navUser";
+    navUser.style.cssText = "font-size:13px;color:#e0f2fe;display:flex;align-items:center;gap:8px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap";
+    navUser.innerHTML = '<span style="overflow:hidden;text-overflow:ellipsis">' + esc(user.displayName || user.email) + '</span> <button class="btn ghost sm" style="padding:4px 8px;font-size:12px;background:rgba(255,255,255,.15);color:#fff;border-color:rgba(255,255,255,.25);flex:0 0 auto" data-logout>Keluar</button>';
+    right.prepend(navUser);
+  }
+  if (!user && navUser) navUser.remove();
+  if (user && navUser) {
+    const nameSpan = navUser.querySelector("span");
+    if (nameSpan) nameSpan.textContent = user.displayName || user.email;
+  }
+}
+
 async function init() {
+  onAuthChange(updateAuthNav);
   DATA = await loadData();
   document.getElementById("schoolName").textContent = DATA.meta.schoolName;
   document.getElementById("programName").textContent = DATA.meta.programName;
@@ -195,6 +265,7 @@ async function init() {
   renderStats();
   renderClasses();
   renderLevelsDesc();
+  renderCharts();
 
   document.getElementById("searchBox").addEventListener("input", e => {
     filterText = e.target.value;

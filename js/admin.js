@@ -1,8 +1,21 @@
-import { loadData, saveData, sbmToast, downloadJSON, classesOf, attendanceStats, levelIndex, quizAvg, checkLevelUp, esc, fmtDate, uid, defaultData, getCurrentUser, onAuthChange, isSuperAdmin } from './data.js';
+import { loadData, saveData, sbmToast, downloadJSON, classesOf, attendanceStats, levelIndex, quizAvg, checkLevelUp, esc, fmtDate, uid, defaultData, getCurrentUser, onAuthChange, isSuperAdmin, getAllTeachers, deleteTeacherData, sendTeacherPasswordReset, logoutUser, db } from './data.js';
+import { doc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 let DATA = null;
 let filterClass = "";
+let filterText = "";
+let sortBy = "name";
+let selectedIds = new Set();
 let editing = null;
+
+// Global logout - works even before wireAdmin / even if init fails
+document.addEventListener("click", async (e) => {
+  const btn = e.target.closest("[data-logout]");
+  if (!btn) return;
+  e.preventDefault();
+  try { await logoutUser(); } catch (err) { console.error(err); }
+  window.location.href = "index.html";
+});
 
 /* ---------------- helpers ---------------- */
 
@@ -215,16 +228,22 @@ function bindEditorEvents() {
 
 function renderTable() {
   const wrap = document.getElementById("tableWrap");
-  const list = DATA.students.filter(s => !filterClass || s.class === filterClass);
+  let list = DATA.students.filter(s => !filterClass || s.class === filterClass);
+  const q = filterText.trim().toLowerCase();
+  if (q) list = list.filter(s => s.name.toLowerCase().includes(q) || s.class.toLowerCase().includes(q));
+  if (sortBy === "name") list.sort((a,b) => a.name.localeCompare(b.name));
+  else if (sortBy === "level") list.sort((a,b) => (b.currentLevel||1) - (a.currentLevel||1));
+  else if (sortBy === "att") list.sort((a,b) => attendanceStats(b).pct - attendanceStats(a).pct);
   if (!list.length) {
     wrap.innerHTML = `<div class="card empty"><div class="big">📚</div>Tiada murid lagi. Klik "Tambah Murid" untuk bermula.</div>`;
+    document.getElementById("bulkPromoteBtn").disabled = true;
     return;
   }
   wrap.innerHTML = `
     <div class="card" style="padding:0;overflow-x:auto">
       <table class="tbl">
         <thead>
-          <tr><th>Murid</th><th>Kelas</th><th>Tahap</th><th>Kehadiran</th><th class="no-print"></th></tr>
+          <tr><th class="no-print"><input type="checkbox" id="selectAll"></th><th>Murid</th><th>Kelas</th><th>Tahap</th><th>Kehadiran</th><th class="no-print"></th></tr>
         </thead>
         <tbody>
           ${list.map(s => {
@@ -240,22 +259,28 @@ function renderTable() {
               `Lihat penuh: ${shareUrl}\n` +
               `_Program Bijak Membaca - ${DATA.meta.schoolName}_`
             );
+            const checked = selectedIds.has(s.id) ? "checked" : "";
+            const linusBadge = isLinus(s) ? `<span class="levelpill" style="background:#fee2e2;color:#b91c1c;margin-left:6px;font-size:10px">⚠️ Intervensi</span>` : "";
             return `
             <tr>
-              <td style="font-weight:700">${esc(s.name)}</td>
+              <td class="no-print"><input type="checkbox" class="rowCheck" data-id="${esc(s.id)}" ${checked}></td>
+              <td style="font-weight:700">${esc(s.name)}${linusBadge}</td>
               <td>${esc(s.class)}</td>
-              <td><span class="levelpill">${esc(DATA.meta.levels[lv].short)} · ${esc(DATA.meta.levels[lv].name)}</span></td>
+              <td><span class="levelpill">${esc(DATA.meta.levels[lv].short)} · ${esc(DATA.meta.levels[lv].name)}</span>${linusBadge ? "" : ""}</td>
               <td>${att.pct}% <span class="smallmeta" style="display:inline">(${att.hadir}/${att.total})</span></td>
               <td class="actions no-print">
                 <button class="btn sm ghost editBtn" data-id="${esc(s.id)}">Edit</button>
-                <button class="btn sm ghost shareBtn" data-url="${esc(shareUrl)}" title="Kongsi pautan ke ibu bapa">🔗</button>
-                <button class="btn sm ghost waBtn" data-url="https://wa.me/?text=${waText}" title="Kongsi via WhatsApp">📱</button>
+                <button class="btn sm ghost shareBtn" data-url="${esc(shareUrl)}" title="Salin pautan">🔗</button>
+                <button class="btn sm ghost qrBtn" data-url="${esc(shareUrl)}" data-name="${esc(s.name)}" title="QR Code">QR</button>
+                <button class="btn sm ghost waBtn" data-url="https://wa.me/?text=${waText}" title="WhatsApp">📱</button>
               </td>
             </tr>`;
           }).join("")}
         </tbody>
       </table>
     </div>`;
+  const bulkBtn = document.getElementById("bulkPromoteBtn");
+  if (bulkBtn) bulkBtn.disabled = selectedIds.size === 0;
   wrap.querySelectorAll(".editBtn").forEach(b => b.addEventListener("click", () => openEditor(b.dataset.id)));
   wrap.querySelectorAll(".shareBtn").forEach(b => b.addEventListener("click", () => {
     const url = b.dataset.url;
@@ -270,6 +295,37 @@ function renderTable() {
   wrap.querySelectorAll(".waBtn").forEach(b => b.addEventListener("click", () => {
     window.open(b.dataset.url, "_blank");
   }));
+  wrap.querySelectorAll(".qrBtn").forEach(b => b.addEventListener("click", () => openQrModal(b.dataset.url, b.dataset.name)));
+  const selectAll = wrap.querySelector("#selectAll");
+  if (selectAll) selectAll.addEventListener("change", e => {
+    if (e.target.checked) list.forEach(s => selectedIds.add(s.id));
+    else list.forEach(s => selectedIds.delete(s.id));
+    renderTable();
+  });
+  wrap.querySelectorAll(".rowCheck").forEach(cb => cb.addEventListener("change", e => {
+    if (e.target.checked) selectedIds.add(e.target.dataset.id);
+    else selectedIds.delete(e.target.dataset.id);
+    document.getElementById("bulkPromoteBtn").disabled = selectedIds.size === 0;
+  }));
+}
+
+function openQrModal(url, name) {
+  const modal = document.getElementById("qrModalBg");
+  const qrEl = document.getElementById("qrCode");
+  const urlEl = document.getElementById("qrUrl");
+  qrEl.innerHTML = "";
+  // eslint-disable-next-line no-undef
+  if (typeof QRCode !== 'undefined') {
+    new QRCode(qrEl, { text: url, width: 180, height: 180, correctLevel: QRCode.CorrectLevel.M });
+  } else {
+    qrEl.textContent = url;
+  }
+  urlEl.textContent = url + (name ? " — " + name : "");
+  const waBtn = document.getElementById("qrWaBtn");
+  const copyBtn = document.getElementById("qrCopyBtn");
+  if (waBtn) waBtn.onclick = () => window.open("https://wa.me/?text=" + encodeURIComponent("Laporan " + (name || "murid") + ": " + url), "_blank");
+  if (copyBtn) copyBtn.onclick = () => navigator.clipboard.writeText(url).then(() => sbmToast("Pautan disalin")).catch(() => prompt("Salin pautan:", url));
+  modal.classList.add("open");
 }
 
 /* ---------------- editor modal ---------------- */
@@ -367,8 +423,10 @@ function renderSettings() {
   document.getElementById("setYear").value = DATA.meta.year;
   const box = document.getElementById("levelInputs");
   box.innerHTML = DATA.meta.levels.map((l, i) => `
-    <div class="editor-row" style="margin-bottom:8px">
-      <input type="text" value="${esc(l.name)}" data-level="${i}">
+    <div class="editor-row" style="margin-bottom:8px;flex-wrap:wrap">
+      <span style="min-width:28px;font-weight:700;color:var(--muted)">L${i+1}</span>
+      <input type="text" value="${esc(l.name)}" data-level="${i}" placeholder="Nama tahap" style="flex:2;min-width:140px">
+      <input type="url" value="${esc(l.material||'')}" data-material="${i}" placeholder="Link bahan (https://)" style="flex:2;min-width:140px">
     </div>`).join("");
 }
 
@@ -384,9 +442,14 @@ function saveSettings() {
 }
 
 function DOMLevelNames() {
-  document.querySelectorAll("#levelInputs input").forEach((inp, i) => {
+  document.querySelectorAll("#levelInputs input[data-level]").forEach(inp => {
+    const i = parseInt(inp.getAttribute("data-level"), 10);
     const v = inp.value.trim();
     if (v) DATA.meta.levels[i].name = v;
+  });
+  document.querySelectorAll("#levelInputs input[data-material]").forEach(inp => {
+    const i = parseInt(inp.getAttribute("data-material"), 10);
+    DATA.meta.levels[i].material = inp.value.trim();
   });
 }
 
@@ -416,18 +479,46 @@ function wireAdmin() {
     filterClass = e.target.value;
     renderTable();
   });
+  const searchEl = document.getElementById("adminSearch");
+  let searchTimer;
+  if (searchEl) searchEl.addEventListener("input", e => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => { filterText = e.target.value; renderTable(); }, 250);
+  });
+  const sortEl = document.getElementById("sortBy");
+  if (sortEl) sortEl.addEventListener("change", e => { sortBy = e.target.value; renderTable(); });
+  document.getElementById("bulkPromoteBtn")?.addEventListener("click", bulkPromote);
+  document.getElementById("promoteClassBtn")?.addEventListener("click", promoteClass);
+  document.getElementById("archiveYearBtn")?.addEventListener("click", archiveYear);
+  document.getElementById("posterBtn")?.addEventListener("click", posterKelasA3);
+  document.getElementById("transferBtn")?.addEventListener("click", openTransferModal);
+  document.getElementById("confirmTransferBtn")?.addEventListener("click", confirmTransfer);
+  document.getElementById("importApdmBtn")?.addEventListener("click", () => document.getElementById("importApdmFile")?.click());
+  document.getElementById("importApdmFile")?.addEventListener("change", async e => {
+    const f = e.target.files[0]; if (!f) return;
+    await importApdmFile(f);
+    e.target.value = "";
+  });
+  document.getElementById("exportKpmBtn")?.addEventListener("click", exportKpm);
+  document.getElementById("exportPbdBtn")?.addEventListener("click", exportPbd);
   document.getElementById("addStudentBtn").addEventListener("click", newStudent);
   document.getElementById("saveStudentBtn").addEventListener("click", saveEditing);
   document.getElementById("deleteStudentBtn").addEventListener("click", deleteEditing);
   document.querySelectorAll("[data-close]").forEach(b => b.addEventListener("click", () => {
-    document.getElementById("editModalBg").classList.remove("open");
-    editing = null;
+    const target = b.getAttribute("data-close");
+    if (target === "qr") document.getElementById("qrModalBg").classList.remove("open");
+    else if (target === "transfer") document.getElementById("transferModalBg").classList.remove("open");
+    else { document.getElementById("editModalBg").classList.remove("open"); editing = null; }
   }));
+  document.getElementById("transferModalBg")?.addEventListener("click", e => { if (e.target===e.currentTarget) e.currentTarget.classList.remove("open"); });
   document.getElementById("editModalBg").addEventListener("click", e => {
     if (e.target === e.currentTarget) {
       document.getElementById("editModalBg").classList.remove("open");
       editing = null;
     }
+  });
+  document.getElementById("qrModalBg").addEventListener("click", e => {
+    if (e.target === e.currentTarget) e.currentTarget.classList.remove("open");
   });
 
   document.getElementById("exportBtn").addEventListener("click", () => {
@@ -642,11 +733,233 @@ function printStudentReport(s) {
   win.document.close();
 }
 
+function bulkPromote() {
+  if (selectedIds.size === 0) return;
+  const maxLevel = DATA.meta.levels.length;
+  let count = 0;
+  DATA.students.forEach(s => {
+    if (selectedIds.has(s.id) && (s.currentLevel||1) < maxLevel) { s.currentLevel++; count++; }
+  });
+  if (!count) { sbmToast("Semua murid terpilih sudah di tahap maksimum"); return; }
+  saveData(DATA);
+  selectedIds.clear();
+  renderTable();
+  sbmToast(count + " murid dinaikkan tahap");
+}
+
+function promoteClass() {
+  const cls = filterClass || prompt("Masukkan nama kelas untuk dinaikkan (cth: 1 Arif -> 2 Arif):", classesOf(DATA)[0] || "");
+  if (!cls) return;
+  const newCls = prompt("Nama kelas baru:", cls.replace(/^(\d+)/, (m,n)=> String(parseInt(n)+1)));
+  if (!newCls || newCls === cls) return;
+  let count = 0;
+  DATA.students.forEach(s => { if (s.class === cls) { s.class = newCls; count++; } });
+  if (!count) { sbmToast("Tiada murid dalam kelas " + cls); return; }
+  saveData(DATA);
+  fillClassFilter();
+  filterClass = newCls;
+  document.getElementById("classFilter").value = newCls;
+  renderTable();
+  sbmToast(count + " murid dipindah " + cls + " → " + newCls);
+}
+
+async function archiveYear() {
+  const year = DATA.meta.year || new Date().getFullYear();
+  const newYear = prompt("Arkib tahun " + year + " dan mula tahun baru. Masukkan tahun baru:", String(parseInt(year)+1));
+  if (!newYear) return;
+  if (!confirm("Arkib " + DATA.students.length + " murid tahun " + year + " dan kosongkan senarai?")) return;
+  try {
+    const teacherId = getCurrentUser().uid;
+    const snapshot = JSON.parse(JSON.stringify(DATA));
+    await setDoc(doc(db, "archives", teacherId + "_" + year), { ...snapshot, archivedAt: new Date().toISOString(), ownerEmail: getCurrentUser().email });
+    DATA.students = [];
+    DATA.meta.year = newYear;
+    await saveData(DATA);
+    fillClassFilter();
+    renderTable();
+    renderSettings();
+    sbmToast("Tahun " + year + " diarkib. Tahun semasa: " + newYear);
+  } catch (err) {
+    console.error(err);
+    alert("Gagal arkib: " + err.message);
+  }
+}
+
+function isLinus(s) {
+  // Flag if stuck at L1-L2 > 8 weeks (56 days) with low attendance/quiz
+  const lvl = s.currentLevel || 1;
+  if (lvl > 2) return false;
+  const firstAtt = (s.attendance||[]).slice().sort((a,b)=>a.d.localeCompare(b.d))[0];
+  if (!firstAtt) return false;
+  const days = Math.floor((Date.now() - new Date(firstAtt.d).getTime())/86400000);
+  if (days < 56) return false;
+  return attendanceStats(s).pct < 70 || quizAvg(s) < 60;
+}
+
+async function importApdmFile(file) {
+  try {
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: "array" });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+    if (!rows.length) throw new Error("Fail kosong");
+    const header = rows[0].map(h => String(h).trim().toLowerCase());
+    const idxNama = header.findIndex(h => h.includes("nama") || h.includes("name"));
+    const idxKelas = header.findIndex(h => h.includes("kelas") || h.includes("class") || h.includes("tingkatan"));
+    const idxJantina = header.findIndex(h => h.includes("jantina") || h.includes("gender") || h.includes("jantina"));
+    const idxKp = header.findIndex(h => h.includes("kp") || h.includes("ic") || h.includes("no kad"));
+    if (idxNama === -1 || idxKelas === -1) throw new Error("Header mesti ada NAMA dan KELAS");
+    const teacherId = getCurrentUser().uid;
+    let count = 0, skip = 0;
+    for (let i=1;i<rows.length;i++) {
+      const r = rows[i];
+      const nama = String(r[idxNama]||"").trim();
+      const kelas = String(r[idxKelas]||"").trim();
+      if (!nama || !kelas) continue;
+      const ic = idxKp!==-1 ? String(r[idxKp]||"").trim() : "";
+      if (ic && DATA.students.some(s => s.ic === ic)) { skip++; continue; }
+      if (DATA.students.some(s => s.name.toLowerCase()===nama.toLowerCase() && s.class===kelas)) { skip++; continue; }
+      const jantinaRaw = idxJantina!==-1 ? String(r[idxJantina]||"").trim().toUpperCase() : "";
+      const gender = jantinaRaw.startsWith("L") || jantinaRaw==="LELAKI" ? "L" : "P";
+      DATA.students.push({ id: uid("s"), name: nama, class: kelas, gender, currentLevel: 1, attendance: [], quizzes: [], vocabulary: [], teacherId, ic });
+      count++;
+    }
+    await saveData(DATA);
+    fillClassFilter();
+    renderTable();
+    sbmToast(count + " murid APDM diimport" + (skip? ", " + skip + " duplikat dilangkau":""));
+  } catch (err) {
+    console.error(err);
+    alert("Gagal import APDM: " + err.message);
+  }
+}
+
+function exportKpm() {
+  const rows = [["Bil","Nama Murid","Kelas","Tahap","Tahap Nama","% Hadir","Purata Kuiz","Status","IC"]];
+  DATA.students.forEach((s,i) => {
+    const att = attendanceStats(s);
+    const lv = levelIndex(DATA, s);
+    const status = isLinus(s) ? "Perlu Intervensi" : (checkLevelUp(DATA,s) ? "Sedia Naik" : "OK");
+    rows.push([i+1, s.name, s.class, s.currentLevel||1, DATA.meta.levels[lv].name, att.pct, quizAvg(s), status, s.ic||""]);
+  });
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws["!cols"] = [{wch:4},{wch:28},{wch:12},{wch:7},{wch:18},{wch:8},{wch:10},{wch:16},{wch:14}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "KPM");
+  XLSX.writeFile(wb, `KPM_BijakMembaca_${DATA.meta.year||""}.xlsx`);
+}
+
+function exportPbd() {
+  // DELIMa IDME PBD format: Nama, Kelas, Mata Pelajaran, TP
+  const tpMap = lvl => "TP" + Math.min(lvl, 6);
+  const rows = [["Nama Murid","Kelas","Mata Pelajaran","TP","Tahap Bacaan","Tarikh"]];
+  const today = new Date().toISOString().slice(0,10);
+  DATA.students.forEach(s => {
+    const lv = s.currentLevel||1;
+    rows.push([s.name, s.class, "Bahasa Melayu - Membaca", tpMap(lv), DATA.meta.levels[levelIndex(DATA,s)].name, today]);
+  });
+  // Use PapaParse for CSV or XLSX for xlsx
+  if (typeof Papa !== "undefined") {
+    const csv = Papa.unparse(rows);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `PBD_BijakMembaca_${DATA.meta.year||""}.csv`;
+    document.body.appendChild(a); a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),500);
+  } else {
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "PBD");
+    XLSX.writeFile(wb, `PBD_BijakMembaca_${DATA.meta.year||""}.xlsx`);
+  }
+}
+
+function posterKelasA3() {
+  const cls = filterClass || "Semua Kelas";
+  const list = filterClass ? DATA.students.filter(s=>s.class===filterClass) : DATA.students;
+  if (!list.length) { sbmToast("Tiada murid untuk poster"); return; }
+  const html = `<!DOCTYPE html><html lang="ms"><head><meta charset="UTF-8"><title>Poster ${esc(cls)}</title><style>
+    @page{size:A3 landscape;margin:12mm} *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:"Plus Jakarta Sans",Arial,sans-serif;padding:10mm}
+    h1{font-size:22px;text-align:center;margin-bottom:4px}
+    .sub{text-align:center;color:#64748b;font-size:12px;margin-bottom:12px}
+    .grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
+    .card{border:1px solid #e2e8f0;border-radius:10px;padding:10px;text-align:center;break-inside:avoid}
+    .avatar{width:48px;height:48px;border-radius:50%;background:#0e7490;color:#fff;display:inline-grid;place-items:center;font-weight:800;margin-bottom:6px}
+    .name{font-weight:700;font-size:11px;line-height:1.2;min-height:26px}
+    .cls{font-size:10px;color:#64748b}
+    .pill{font-size:10px;background:#ecfeff;color:#155e75;padding:3px 7px;border-radius:99px;display:inline-block;margin:4px 0}
+    .bar{height:6px;background:#e2e8f0;border-radius:99px;overflow:hidden;margin-top:4px}
+    .bar i{display:block;height:100%;background:linear-gradient(90deg,#0e7490,#22d3ee)}
+    @media print{body{padding:0}}
+  </style></head><body>
+    <h1>${esc(DATA.meta.schoolName)} — ${esc(DATA.meta.programName)}</h1>
+    <div class="sub">Kelas: ${esc(cls)} | Tahun ${esc(DATA.meta.year)} | ${list.length} murid | ${new Date().toLocaleDateString("ms-MY")}</div>
+    <div class="grid">${list.map(s=>{ const lv=levelIndex(DATA,s); const att=attendanceStats(s); const initials=s.name.replace(/binti|bin/gi,"").trim().split(/\s+/).slice(0,2).map(w=>w[0]).join(""); return `<div class="card"><div class="avatar">${esc(initials.toUpperCase())}</div><div class="name">${esc(s.name)}</div><div class="cls">${esc(s.class)}</div><div class="pill">${esc(DATA.meta.levels[lv].short)} · ${esc(DATA.meta.levels[lv].name)}</div><div class="bar"><i style="width:${att.pct}%"></i></div><div style="font-size:9px;color:#64748b;margin-top:2px">${att.pct}% hadir</div></div>`;}).join("")}</div>
+    <script>window.onload=()=>window.print()<\/script></body></html>`;
+  const win=window.open("","_blank"); win.document.write(html); win.document.close();
+}
+
+async function openTransferModal() {
+  if (selectedIds.size===0) { sbmToast("Pilih murid dahulu (tanda ✓)"); return; }
+  if (!isSuperAdmin()) { sbmToast("Hanya superadmin boleh pindah guru"); return; }
+  const teachers = await getAllTeachers();
+  const sel=document.getElementById("transferTeacher");
+  sel.innerHTML = teachers.map(t=>`<option value="${esc(t.id)}">${esc(t.email||t.id.slice(0,8))} — ${t.students} murid</option>`).join("");
+  document.getElementById("transferCount").textContent = selectedIds.size;
+  document.getElementById("transferModalBg").classList.add("open");
+}
+
+async function confirmTransfer() {
+  const tid=document.getElementById("transferTeacher").value;
+  if (!tid) return;
+  if (!confirm("Pindah " + selectedIds.size + " murid ke guru terpilih?")) return;
+  let moved=0;
+  DATA.students.forEach(s=>{ if(selectedIds.has(s.id)){ s.teacherId=tid; moved++; }});
+  selectedIds.clear();
+  await saveData(DATA);
+  // Also need to ensure destination teacher doc exists, saveData as superadmin already writes to each teacher doc via saveAllTeachersData, so moved students will be written to correct doc
+  document.getElementById("transferModalBg").classList.remove("open");
+  renderTable();
+  sbmToast(moved + " murid dipindah");
+}
+
+function renderOnboarding() {
+  const card=document.getElementById("onboardingCard");
+  if (!card || !DATA) return;
+  const doneImport = DATA.students.length>0;
+  const doneLevel = DATA.meta.levels.some(l=>l.material);
+  const doneShare = DATA.students.some(s=>s.attendance && s.attendance.length>0);
+  const allDone = doneImport && doneLevel && doneShare;
+  if (allDone && localStorage.getItem("sbm_onboard_done")==="1") { card.style.display="none"; return; }
+  card.style.display="block";
+  card.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+    <div>
+      <h3 style="font-size:15px;margin-bottom:4px">👋 Selamat datang, Cikgu!</h3>
+      <p style="font-size:13px;color:var(--muted)">3 langkah mula:</p>
+      <ol style="font-size:13px;margin:8px 0 0 18px;line-height:1.7">
+        <li>${doneImport ? "✅" : "⬜"} Import murid (APDM/CSV) — ${DATA.students.length} murid</li>
+        <li>${doneLevel ? "✅" : "⬜"} Isi link bahan per tahap di Tetapan Program</li>
+        <li>${doneShare ? "✅" : "⬜"} Kongsi QR/WhatsApp ke ibu bapa</li>
+      </ol>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="btn ghost sm" id="onboardClose">Tutup</button>
+      ${!allDone ? `<span style="font-size:12px;color:var(--muted)">${[doneImport,doneLevel,doneShare].filter(Boolean).length}/3 siap</span>` : `<span style="font-size:12px;color:var(--good);font-weight:700">Sedia!</span>`}
+    </div>
+  </div>`;
+  card.querySelector("#onboardClose")?.addEventListener("click", ()=>{ localStorage.setItem("sbm_onboard_done","1"); card.style.display="none"; });
+}
+
 async function init(user) {
   DATA = await loadData();
   document.getElementById("adminMain").style.display = "block";
   const nameEl = document.getElementById("userName");
-  if (nameEl && user) nameEl.textContent = user.displayName || user.email;
+  if (nameEl && user) {
+    const name = user.displayName || user.email || "Guru";
+    const initial = name.trim().charAt(0).toUpperCase();
+    nameEl.innerHTML = `<span style="width:22px;height:22px;border-radius:50%;background:#fff;color:var(--primary-dark);display:grid;place-items:center;font-size:11px;font-weight:800;flex:0 0 auto">${esc(initial)}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:110px">${esc(name)}</span>`;
+  }
   if (isSuperAdmin(user)) {
     const bar = document.querySelector("#adminMain .adminbar");
     if (bar && !document.getElementById("superBanner")) {
@@ -662,6 +975,94 @@ async function init(user) {
   fillClassFilter();
   renderTable();
   wireAdmin();
+  const tBtn=document.getElementById("transferBtn");
+  if (tBtn) tBtn.style.display = isSuperAdmin(user) ? "" : "none";
+  renderOnboarding();
+  if (isSuperAdmin(user)) renderTeacherPanel();
+}
+
+async function renderTeacherPanel() {
+  let wrap = document.getElementById("teacherPanel");
+  if (!wrap) {
+    wrap = document.createElement("div");
+    wrap.id = "teacherPanel";
+    const anchor = document.getElementById("tableWrap");
+    anchor.after(wrap);
+  }
+  wrap.innerHTML = `<div class="card"><p style="color:var(--muted)">Memuatkan senarai guru…</p></div>`;
+  try {
+    const teachers = await getAllTeachers();
+    wrap.innerHTML = `
+      <h2 class="sec">👑 Urus Guru (${teachers.length})</h2>
+      <div class="card" style="padding:0;overflow-x:auto">
+        <table class="tbl">
+          <thead>
+            <tr><th>Guru</th><th>Sekolah</th><th>Murid</th><th class="no-print"></th></tr>
+          </thead>
+          <tbody>
+            ${teachers.length ? teachers.map(t => `
+              <tr>
+                <td style="font-weight:700">${esc(t.email || ("ID: " + t.id.slice(0, 8) + "…"))}<br><small style="color:var(--muted);font-weight:500">${esc(t.id)}</small></td>
+                <td>${esc(t.schoolName)}</td>
+                <td>${t.students}</td>
+                <td class="actions no-print">
+                  ${t.email ? `<button class="btn sm ghost resetPwBtn" data-email="${esc(t.email)}" title="Hantar emel reset kata laluan">✉️ Reset</button>` : ""}
+                  <button class="btn sm danger delTeacherBtn" data-id="${esc(t.id)}" title="Padam SEMUA data murid guru ini">Padam data</button>
+                </td>
+              </tr>`).join("") : `<tr><td colspan="4" style="text-align:center;color:var(--muted)">Tiada guru lagi.</td></tr>`}
+          </tbody>
+        </table>
+      </div>
+      <p style="font-size:12px;color:var(--muted);margin-top:8px">Reset menghantar emel reset kata laluan Firebase ke guru. Akaun log masuk guru diurus dalam Firebase Console → Authentication.</p>`;
+
+    wrap.querySelectorAll(".resetPwBtn").forEach(b => b.addEventListener("click", async () => {
+      const email = b.dataset.email;
+      if (!confirm("Hantar emel reset kata laluan ke " + email + "?")) return;
+      try {
+        await sendTeacherPasswordReset(email);
+        sbmToast("Emel reset dihantar ke " + email);
+      } catch (err) {
+        console.error(err);
+        alert("Gagal hantar emel reset: " + err.message);
+      }
+    }));
+
+    wrap.querySelectorAll(".delTeacherBtn").forEach(b => b.addEventListener("click", async () => {
+      const tid = b.dataset.id;
+      if (!confirm("PADAM semua data murid guru ini? Tindakan tidak boleh dibatalkan.")) return;
+      if (!confirm("Sahkan sekali lagi: padam data guru " + tid + "? Termasuk akaun log masuk jika Cloud Function aktif.")) return;
+      const useFunction = confirm("Padam juga akaun log masuk guru? OK = ya (perlukan Cloud Function), Cancel = data sahaja.");
+      try {
+        if (useFunction) {
+          try {
+            const { getFunctions, httpsCallable } = await import("https://www.gstatic.com/firebasejs/10.7.1/firebase-functions.js");
+            const functions = getFunctions((await import('./data.js')).db.app || undefined);
+            // Fallback to default app
+            const callable = httpsCallable(getFunctions(), "deleteTeacher");
+            await callable({ teacherId: tid });
+            sbmToast("Akaun & data guru dipadam (Cloud Function).");
+          } catch (err) {
+            console.warn("Cloud Function deleteTeacher tidak tersedia, padam data sahaja:", err);
+            await deleteTeacherData(tid);
+            sbmToast("Data dipadam. Padam akaun di Firebase Console → Authentication.");
+          }
+        } else {
+          await deleteTeacherData(tid);
+          sbmToast("Data guru dipadam.");
+        }
+        DATA = await loadData();
+        fillClassFilter();
+        renderTable();
+        renderTeacherPanel();
+      } catch (err) {
+        console.error(err);
+        alert("Gagal padam: " + err.message);
+      }
+    }));
+  } catch (err) {
+    console.error(err);
+    wrap.innerHTML = `<div class="card"><p style="color:var(--bad)">Gagal muat senarai guru: ${esc(err.message)}</p></div>`;
+  }
 }
 
 onAuthChange((user) => {

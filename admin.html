@@ -8,6 +8,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0e7490">
+  <meta name="apple-mobile-web-app-capable" content="yes">
 </head>
 <body>
 
@@ -18,10 +21,10 @@
         <h1>Panel Guru</h1>
         <p id="programName">Program Bijak Membaca</p>
       </div>
-      <div style="display:flex;align-items:center;gap:12px">
-        <span id="userName" style="font-size:13px;color:var(--muted);font-weight:500"></span>
-        <button class="btn ghost sm" data-logout>Log Keluar</button>
-        <button class="btn ghost sm" data-dark-toggle aria-label="Tukar mod gelap/terang"></button>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+        <span id="userName" style="font-size:13px;color:#fff;font-weight:600;background:rgba(255,255,255,.15);padding:6px 10px;border-radius:99px;display:inline-flex;align-items:center;gap:6px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+        <button class="btn ghost sm" data-logout style="background:rgba(255,255,255,.15);color:#fff;border-color:rgba(255,255,255,.25)">Log Keluar</button>
+        <button class="btn ghost sm" data-dark-toggle aria-label="Tukar mod gelap/terang" style="background:rgba(255,255,255,.12);color:#fff;border-color:rgba(255,255,255,.2);min-width:36px;justify-content:center"></button>
       </div>
     </div>
     <nav class="tabs no-print">
@@ -33,21 +36,36 @@
   <main id="adminMain" class="wrap" style="display:none">
 
     <div class="adminbar">
-      <div class="left">
+      <div class="left" style="flex:1;min-width:240px">
+        <input type="search" id="adminSearch" placeholder="Cari nama murid..." style="flex:1;min-width:160px">
         <select id="classFilter">
           <option value="">Semua Kelas</option>
         </select>
-        <button class="btn no-print" id="addStudentBtn">+ Tambah Murid</button>
+        <select id="sortBy">
+          <option value="name">Nama A-Z</option>
+          <option value="level">Tahap</option>
+          <option value="att">Kehadiran</option>
+        </select>
       </div>
       <div class="left no-print">
-        <button class="btn ghost sm" id="exportBtn">Muat Turun JSON</button>
-        <button class="btn ghost sm" id="importBtn">Muat Naik JSON</button>
-        <input type="file" id="importFile" accept=".json" hidden>
+        <button class="btn no-print" id="addStudentBtn">+ Tambah Murid</button>
         <button class="btn ghost sm" id="importCsvBtn">Import CSV</button>
         <input type="file" id="importCsvFile" accept=".csv" hidden>
         <button class="btn ghost sm" id="previewBtn">Lihat Dashboard</button>
       </div>
     </div>
+    <div class="adminbar no-print" style="justify-content:flex-start">
+      <button class="btn ghost sm" id="bulkPromoteBtn" disabled>⬆️ Naik Tahap Terpilih</button>
+      <button class="btn ghost sm" id="promoteClassBtn">🎓 Naik Kelas</button>
+      <button class="btn ghost sm" id="archiveYearBtn">📦 Arkib Tahun</button>
+      <button class="btn ghost sm" id="posterBtn">🖼️ Poster A3</button>
+      <button class="btn ghost sm" id="transferBtn" style="display:none">🔀 Pindah Guru</button>
+      <button class="btn ghost sm" id="importApdmBtn">📥 Import APDM</button>
+      <input type="file" id="importApdmFile" accept=".xlsx,.xls" hidden>
+      <button class="btn ghost sm" id="exportKpmBtn">📊 Eksport KPM</button>
+      <button class="btn ghost sm" id="exportPbdBtn">📝 Eksport PBD</button>
+    </div>
+    <div id="onboardingCard" class="card no-print" style="display:none;border:2px dashed var(--accent);background:#fffbeb"></div>
 
     <div id="tableWrap"></div>
 
@@ -95,10 +113,51 @@
     </div>
   </div>
 
+  <div class="modal-bg" id="qrModalBg">
+    <div class="modal" style="max-width:380px;text-align:center">
+      <div class="modal-head">
+        <h3>Kongsi ke Ibu Bapa</h3>
+        <button class="x" data-close="qr">×</button>
+      </div>
+      <div class="modal-body">
+        <div id="qrCode" style="display:flex;justify-content:center;padding:12px"></div>
+        <p id="qrUrl" style="font-size:12px;color:var(--muted);word-break:break-all;margin-top:8px"></p>
+        <div style="display:flex;gap:8px;justify-content:center;margin-top:12px;flex-wrap:wrap">
+          <button class="btn sm" id="qrCopyBtn">Salin Pautan</button>
+          <button class="btn sm ghost" id="qrWaBtn">Buka WhatsApp</button>
+        </div>
+      </div>
+      <div class="modal-foot no-print">
+        <button class="btn ghost" data-close="qr">Tutup</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-bg" id="transferModalBg">
+    <div class="modal" style="max-width:420px">
+      <div class="modal-head">
+        <h3>🔀 Pindah Murid ke Guru Lain</h3>
+        <button class="x" data-close="transfer">×</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:13px;color:var(--muted)">Pilih guru destinasi untuk <span id="transferCount">0</span> murid terpilih.</p>
+        <select id="transferTeacher" style="width:100%;margin-top:8px"></select>
+        <p style="font-size:12px;color:var(--muted);margin-top:8px">Hanya superadmin boleh pindah antara guru.</p>
+      </div>
+      <div class="modal-foot no-print">
+        <button class="btn ghost" data-close="transfer">Batal</button>
+        <button class="btn" id="confirmTransferBtn">Pindah</button>
+      </div>
+    </div>
+  </div>
+
   <footer class="site">
     <b>SMK Puncak Alam 3</b> — Panel Guru Program Bijak Membaca
   </footer>
 
+  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script type="module" src="js/sample.js"></script>
   <script type="module" src="js/data.js"></script>
   <script type="module" src="js/lib/papaparse.min.js"></script>

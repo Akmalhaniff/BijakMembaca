@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import { getFirestore, collection, doc, getDoc, setDoc, query, where, getDocs, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, GoogleAuthProvider, signInWithPopup, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getFirestore, collection, doc, getDoc, setDoc, deleteDoc, query, where, getDocs, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDXrS3hDm-DUoh6Lg1ARJ0gGXc1kgb44Ok",
@@ -45,7 +45,9 @@ function addTeacherIdToStudents(data, teacherId) {
 
 export function defaultData() {
   if (typeof STUDENT_DATA !== "undefined") {
-    return JSON.parse(JSON.stringify(STUDENT_DATA));
+    const copy = JSON.parse(JSON.stringify(STUDENT_DATA));
+    copy.meta.levels = copy.meta.levels.map(l => ({ material: "", ...l }));
+    return copy;
   }
   return {
     meta: {
@@ -53,12 +55,12 @@ export function defaultData() {
       programName: "Program Bijak Membaca",
       year: "2026",
       levels: [
-        { name: "Mengenal Huruf", short: "L1" },
-        { name: "Suku Kata", short: "L2" },
-        { name: "Perkataan", short: "L3" },
-        { name: "Ayat Mudah", short: "L4" },
-        { name: "Perenggan", short: "L5" },
-        { name: "Buku & Petikan", short: "L6" }
+        { name: "Mengenal Huruf", short: "L1", material: "" },
+        { name: "Suku Kata", short: "L2", material: "" },
+        { name: "Perkataan", short: "L3", material: "" },
+        { name: "Ayat Mudah", short: "L4", material: "" },
+        { name: "Perenggan", short: "L5", material: "" },
+        { name: "Buku & Petikan", short: "L6", material: "" }
       ]
     },
     students: []
@@ -161,16 +163,46 @@ export async function saveData(data) {
     return;
   }
 
+  // Audit log — append to teacher's audit trail (keep last 50)
+  const auditEntry = { by: (auth.currentUser && auth.currentUser.email) || "unknown", at: new Date().toISOString(), students: (data.students||[]).length };
   try {
     await setDoc(doc(db, "teachers", teacherId), {
       ...data,
-      updatedAt: serverTimestamp()
+      ownerEmail: (auth.currentUser && auth.currentUser.email) || null,
+      updatedAt: serverTimestamp(),
+      lastEditor: auditEntry.by,
+      auditLog: [...((await getDoc(doc(db, "teachers", teacherId))).data()?.auditLog || []).slice(-49), auditEntry]
     }, { merge: true });
     console.log("Bijak: data disimpan ke Firestore.");
   } catch (err) {
     console.error("Bijak save error:", err);
-    sbmToast("Simpan gagal: " + err.message);
+    // Fallback without audit read (permission or race) — still save data
+    try { await setDoc(doc(db, "teachers", teacherId), { ...data, ownerEmail: (auth.currentUser && auth.currentUser.email) || null, updatedAt: serverTimestamp() }, { merge: true }); } catch(e){ sbmToast("Simpan gagal: " + e.message); }
   }
+}
+
+// ---- Superadmin: teacher management (support) ----
+
+export async function getAllTeachers() {
+  const snap = await getDocs(collection(db, "teachers"));
+  return snap.docs.map(d => {
+    const data = d.data() || {};
+    return {
+      id: d.id,
+      email: data.ownerEmail || null,
+      students: Array.isArray(data.students) ? data.students.length : 0,
+      schoolName: (data.meta && data.meta.schoolName) || "-",
+      updatedAt: data.updatedAt && data.updatedAt.toDate ? data.updatedAt.toDate() : null
+    };
+  }).sort((a, b) => (b.students - a.students));
+}
+
+export async function deleteTeacherData(teacherId) {
+  await deleteDoc(doc(db, "teachers", teacherId));
+}
+
+export async function sendTeacherPasswordReset(email) {
+  await sendPasswordResetEmail(auth, email);
 }
 
 async function saveAllTeachersData(data, superadminId) {
@@ -192,6 +224,7 @@ async function saveAllTeachersData(data, superadminId) {
     await setDoc(ref, {
       meta: base.meta || data.meta,
       students: byTeacher[tid] || [],
+      ownerEmail: base.ownerEmail || ((auth.currentUser && tid === auth.currentUser.uid) ? auth.currentUser.email : null),
       updatedAt: serverTimestamp()
     }, { merge: true });
   }

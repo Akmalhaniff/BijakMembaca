@@ -8,6 +8,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0e7490">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230e7490'/><text x='50' y='62' text-anchor='middle' font-size='48' font-weight='800' fill='white'>BM</text></svg>">
 </head>
 <body>
 
@@ -22,21 +26,30 @@
     <nav class="tabs no-print">
       <a href="index.html" class="on">Dashboard</a>
       <a href="admin.html" data-auth="user">Panel Guru</a>
-      <a href="login.html" data-auth="guest" style="margin-left:auto">Log Masuk</a>
-      <button class="btn ghost sm" data-dark-toggle style="margin-left:auto" aria-label="Tukar mod gelap/terang"></button>
+      <div id="navRight" style="margin-left:auto;display:flex;gap:8px;align-items:center">
+        <a href="login.html" data-auth="guest" class="btn ghost sm" style="background:rgba(255,255,255,.15);color:#fff;border-color:rgba(255,255,255,.25)">Log Masuk</a>
+      </div>
+      <button class="btn ghost sm" data-dark-toggle aria-label="Tukar mod gelap/terang" style="background:rgba(255,255,255,.12);color:#fff;border-color:rgba(255,255,255,.2);min-width:36px;justify-content:center;margin-left:8px;flex:0 0 auto"></button>
     </nav>
   </header>
 
   <main class="wrap">
-    <div class="hero">
-      <h2 id="heroTitle">Laporan Kemajuan Murid</h2>
-      <p>Portal ini memaparkan perkembangan kemahiran membaca murid-murid yang menyertai Program Bijak Membaca. Ibu bapa boleh memantau kemajuan anak masing-masing manakala pihak sekolah boleh melihat pencapaian keseluruhan program.</p>
-      <div class="meta">
-        <span id="metaTotal">0 murid</span>
-        <span id="metaLevels">0 tahap</span>
-        <span id="metaYear">Tahun 2026</span>
+    <section class="hero" aria-labelledby="heroTitle">
+      <div class="hero-content">
+        <h2 id="heroTitle">Laporan Kemajuan Murid</h2>
+        <p class="hero-lead">
+          Portal ini memaparkan perkembangan kemahiran membaca murid-murid
+          yang menyertai <strong>Program Bijak Membaca</strong>. Ibu bapa boleh
+          memantau kemajuan anak masing-masing manakala pihak sekolah boleh
+          melihat pencapaian keseluruhan program.
+        </p>
+        <div class="meta" role="list">
+          <span role="listitem" id="metaTotal">0 murid</span>
+          <span role="listitem" id="metaLevels">0 tahap</span>
+          <span role="listitem" id="metaYear">Tahun 2026</span>
+        </div>
       </div>
-    </div>
+    </section>
 
     <div class="card">
       <div class="stats grid">
@@ -56,6 +69,14 @@
           <div class="num" id="stAvgQuiz">0</div>
           <div class="lbl">Purata Skor Kuiz</div>
         </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
+      <h3 style="font-size:15px;margin-bottom:12px">📊 Analitik Program</h3>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px">
+        <div><canvas id="levelChart" height="200"></canvas></div>
+        <div><canvas id="attChart" height="200"></canvas></div>
       </div>
     </div>
 
@@ -96,6 +117,7 @@
     © <span id="footYear"></span> <b>SMK Puncak Alam 3</b> — Program Bijak Membaca. Dibina untuk kemajuan pembelajaran.
   </footer>
 
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script type="module" src="js/sample.js"></script>
   <script type="module" src="js/data.js"></script>
   <script type="module" src="js/darkmode.js"></script>
