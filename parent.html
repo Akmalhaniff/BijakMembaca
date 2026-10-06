@@ -27,7 +27,7 @@
   <header class="appbar">
     <div class="wrap">
       <div class="brand">
-        <span class="brand-mark" data-icon="book"></span>
+        <img class="brand-logo" src="icons/logo.png" alt="Logo SMK Puncak Alam 3" width="40" height="40">
         <span class="brand-text">
           <b id="schoolName">SMK Puncak Alam 3</b>
           <small id="programName">Program Bijak Membaca</small>
@@ -52,7 +52,7 @@
 
   <script type="module" src="js/darkmode.js"></script>
   <script type="module">
-    import { loadAllData, attendanceStats, levelIndex, quizAvg, checkLevelUp, fmtDate, esc } from './js/data.js';
+    import { loadAllData, attendanceStats, levelIndex, checkLevelUp, fmtDate, esc } from './js/data.js';
     import { avatar, levelPill, levelHue, meterClass, hydrateIcons } from './js/ui.js';
 
     function renderStudent(s, data) {
@@ -60,7 +60,6 @@
       const lv = levelIndex(data, s);
       const total = data.meta.levels.length;
       const lastAtt = (s.attendance || []).slice().sort((a, b) => (a.d < b.d ? 1 : -1)).slice(0, 20);
-      const quizes = (s.quizzes || []).slice().sort((a, b) => (a.d < b.d ? 1 : -1)).slice(0, 10);
       const levelUp = checkLevelUp(data, s);
       const vocab = s.vocabulary || [];
       const pct = total ? Math.round(((lv + 1) / total) * 100) : 0;
@@ -85,7 +84,7 @@
         <div class="kpis" style="margin-top:14px">
           <div class="kpi" style="background:var(--surface);border:1px solid var(--line)"><b>${lv + 1}<span style="font-size:14px;color:var(--muted)">/${total}</span></b><small>Tahap</small></div>
           <div class="kpi" style="background:var(--surface);border:1px solid var(--line)"><b style="color:var(--good)">${att.pct}%</b><small>Kehadiran</small></div>
-          <div class="kpi" style="background:var(--surface);border:1px solid var(--line)"><b style="color:var(--primary-ink)">${quizAvg(s)}</b><small>Purata kuiz</small></div>
+          <div class="kpi" style="background:var(--surface);border:1px solid var(--line)"><b style="color:var(--primary-ink)">${vocab.length}</b><small>Kosa kata</small></div>
         </div>
 
         <div class="card">
@@ -106,15 +105,6 @@
             : '<p class="muted">Tiada rekod sesi.</p>'}
         </div>
 
-        <div class="card">
-          <div class="card-title"><span class="ic">📝</span>Keputusan kuiz</div>
-          ${quizes.length ? quizes.map(q => `
-            <div class="qrow">
-              <span class="qt">${esc(q.t)}<small>${esc(fmtDate(q.d))}</small></span>
-              <div class="meter ${meterClass(q.s + 5)}"><i style="width:${Math.min(q.s, 100)}%"></i></div>
-              <span class="qs">${q.s}</span>
-            </div>`).join("") : '<p class="muted">Tiada rekod kuiz.</p>'}
-        </div>
 
         <div class="card">
           <div class="card-title"><span class="ic">🔤</span>Kosa kata dikuasai · ${vocab.length}</div>
@@ -134,7 +124,7 @@
           `Kelas: ${s.class}\n` +
           `Tahap: ${data.meta.levels[lv].name}\n` +
           `Kehadiran: ${att.pct}%\n` +
-          `Purata Kuiz: ${quizAvg(s)}/100\n\n` +
+          `Kosa kata: ${vocab.length} perkataan\n\n` +
           `Lihat penuh: ${location.href}\n` +
           `_${data.meta.programName} - ${data.meta.schoolName}_`;
         window.open("https://wa.me/?text=" + encodeURIComponent(text), "_blank");

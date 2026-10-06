@@ -1,4 +1,4 @@
-import { loadData, programStats, classesOf, attendanceStats, levelIndex, quizAvg, checkLevelUp, esc, fmtDate, onAuthChange, logoutUser } from './data.js';
+import { loadData, programStats, classesOf, attendanceStats, levelIndex, checkLevelUp, esc, fmtDate, onAuthChange, logoutUser } from './data.js';
 import { ICONS, avatar, levelPill, levelHue, levelColor, miniRing, meterClass, greeting, hydrateIcons } from './ui.js';
 
 // Global logout delegation for dynamically created nav button
@@ -25,7 +25,7 @@ function renderHero() {
   document.getElementById("heroEyebrow").textContent = greeting() + (name ? ", " + name : "");
   document.getElementById("heroTitle").textContent = USER ? "Kemajuan murid anda" : "Laporan Kemajuan Murid";
   document.getElementById("heroLead").textContent = st.total
-    ? `${st.total} murid sedang membina kemahiran membaca. Purata kehadiran ${st.avgAtt}% dengan skor kuiz purata ${st.avgQuiz}.`
+    ? `${st.total} murid sedang membina kemahiran membaca dengan purata kehadiran ${st.avgAtt}%.`
     : "Pantau perkembangan kemahiran membaca setiap murid dalam satu paparan.";
   document.getElementById("ringNum").textContent = st.avgLevel || 0;
   const c = 2 * Math.PI * 42;
@@ -42,7 +42,7 @@ function renderStats() {
   document.getElementById("stTotal").textContent = st.total;
   document.getElementById("stAvgLevel").textContent = st.avgLevel;
   document.getElementById("stAvgAtt").textContent = st.avgAtt + "%";
-  document.getElementById("stAvgQuiz").textContent = st.avgQuiz;
+  document.getElementById("stReady").textContent = DATA.students.filter(s => checkLevelUp(DATA, s)).length;
 }
 
 /* ---------------- class chips + list ---------------- */
@@ -75,7 +75,7 @@ function studentCard(s) {
         <div class="meta">
           <span>Hadir ${att.pct}%</span>
           <div class="meter ${meterClass(att.pct)}"><i style="width:${att.pct}%"></i></div>
-          <span>Kuiz ${quizAvg(s)}</span>
+          <span>${(s.vocabulary || []).length} kata</span>
         </div>
       </div>
       <div class="side">${miniRing(lv, total)}</div>
@@ -202,7 +202,6 @@ function openModal(s) {
   const lv = levelIndex(DATA, s);
   const totalLevels = DATA.meta.levels.length;
   const lastAtt = (s.attendance || []).slice().sort((a, b) => (a.d < b.d ? 1 : -1)).slice(0, 14);
-  const quizes = (s.quizzes || []).slice().sort((a, b) => (a.d < b.d ? 1 : -1)).slice(0, 8);
   const levelUp = checkLevelUp(DATA, s);
   const vocab = s.vocabulary || [];
 
@@ -222,7 +221,7 @@ function openModal(s) {
     <div class="kpis">
       <div class="kpi"><b>${lv + 1}<span style="font-size:14px;color:var(--muted)">/${totalLevels}</span></b><small>Tahap</small></div>
       <div class="kpi"><b style="color:var(--good)">${att.pct}%</b><small>Kehadiran</small></div>
-      <div class="kpi"><b style="color:var(--primary-ink)">${quizAvg(s)}</b><small>Purata kuiz</small></div>
+      <div class="kpi"><b style="color:var(--primary-ink)">${vocab.length}</b><small>Kosa kata</small></div>
     </div>
 
     <div class="dsec">
@@ -245,15 +244,6 @@ function openModal(s) {
       : '<p class="muted" style="font-size:13px">Tiada rekod sesi.</p>'}
     </div>
 
-    <div class="dsec">
-      <h4>📝 Keputusan kuiz</h4>
-      ${quizes.length ? quizes.map(q => `
-        <div class="qrow">
-          <span class="qt">${esc(q.t)}<small>${esc(fmtDate(q.d))}</small></span>
-          <div class="meter ${meterClass(q.s + 5)}"><i style="width:${Math.min(q.s, 100)}%"></i></div>
-          <span class="qs">${q.s}</span>
-        </div>`).join("") : '<p class="muted" style="font-size:13px">Tiada rekod kuiz.</p>'}
-    </div>
 
     <div class="dsec">
       <h4>🔤 Kosa kata · ${vocab.length} perkataan</h4>

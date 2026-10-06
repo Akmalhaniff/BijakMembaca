@@ -1,4 +1,4 @@
-import { loadData, saveData, sbmToast, downloadJSON, classesOf, attendanceStats, levelIndex, quizAvg, checkLevelUp, esc, fmtDate, uid, defaultData, getCurrentUser, onAuthChange, isSuperAdmin, getAllTeachers, deleteTeacherData, sendTeacherPasswordReset, logoutUser, db } from './data.js';
+import { loadData, saveData, sbmToast, downloadJSON, classesOf, attendanceStats, levelIndex, checkLevelUp, esc, fmtDate, uid, defaultData, getCurrentUser, onAuthChange, isSuperAdmin, getAllTeachers, deleteTeacherData, sendTeacherPasswordReset, logoutUser, db } from './data.js';
 import { doc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { ICONS, avatar, levelPill, levelHue, meterClass, greeting, todayISO, hydrateIcons } from './ui.js';
 
@@ -24,7 +24,9 @@ document.addEventListener("click", async (e) => {
 });
 
 function shareUrlFor(s) {
-  return `${location.origin}${location.pathname.replace(/admin(\.html)?$/, "")}parent.html?student=${encodeURIComponent(s.id)}`;
+  // Folder of the current page, e.g. "/" (Firebase, clean URLs) or "/BijakMembaca/" (GitHub Pages)
+  const base = location.pathname.replace(/[^/]*\/?$/, "");
+  return `${location.origin}${base}parent.html?student=${encodeURIComponent(s.id)}`;
 }
 function shareTextFor(s) {
   const lv = levelIndex(DATA, s);
@@ -32,7 +34,7 @@ function shareTextFor(s) {
     `Kelas: ${s.class}\n` +
     `Tahap: ${DATA.meta.levels[lv].name}\n` +
     `Kehadiran: ${attendanceStats(s).pct}%\n` +
-    `Purata Kuiz: ${quizAvg(s)}/100\n\n` +
+    `Kosa kata: ${(s.vocabulary || []).length} perkataan\n\n` +
     `Lihat penuh: ${shareUrlFor(s)}\n` +
     `_${DATA.meta.programName} - ${DATA.meta.schoolName}_`;
 }
@@ -63,7 +65,7 @@ function renderEditForm() {
   const levelUp = checkLevelUp(DATA, s);
   const classes = classesOf(DATA);
   const photoSrc = pendingPhoto || s.photo;
-  const tabs = [["profil", "Profil"], ["hadir", "Kehadiran"], ["kuiz", "Kuiz"], ["kata", "Kosa Kata"]];
+  const tabs = [["profil", "Profil"], ["hadir", "Kehadiran"], ["kata", "Kosa Kata"]];
   document.getElementById("deleteStudentBtn").classList.toggle("hidden", isNew);
   document.getElementById("printReportBtn").classList.toggle("hidden", isNew);
 
@@ -126,17 +128,6 @@ function renderEditForm() {
       <div id="attList" style="margin-top:12px"></div>
     </div>
 
-    <div class="seg-pane ${editTab === "kuiz" ? "on" : ""}" data-pane="kuiz">
-      <div class="stack">
-        <input type="text" id="qzTitle" placeholder="Tajuk kuiz (cth: Kuiz Suku Kata)" autocomplete="off">
-        <div class="row-input">
-          <input type="date" id="qzDate" value="${todayISO()}" style="flex:1.4">
-          <input type="number" id="qzScore" min="0" max="100" inputmode="numeric" placeholder="Markah" style="flex:1">
-        </div>
-        <button type="button" class="btn" id="addQzBtn">Tambah kuiz</button>
-      </div>
-      <div id="quizList" style="margin-top:12px"></div>
-    </div>
 
     <div class="seg-pane ${editTab === "kata" ? "on" : ""}" data-pane="kata">
       <div class="row-input">
@@ -147,7 +138,6 @@ function renderEditForm() {
     </div>`;
 
   renderAttList();
-  renderQuizList();
   renderVocabTags();
 }
 
@@ -174,17 +164,6 @@ function renderAttList() {
     : '<p class="empty" style="padding:20px 0">Tiada sesi dicatat lagi.</p>';
 }
 
-function renderQuizList() {
-  const el = document.getElementById("quizList");
-  if (!el) return;
-  const list = sortedWithIndex(editing.quizzes);
-  el.innerHTML = list.length ? list.map(({ x, i }) => `
-    <div class="list-row">
-      <div class="grow"><b>${esc(x.t)}</b><small>${esc(fmtDate(x.d))}</small></div>
-      <span class="badge ${x.s >= 75 ? "good" : x.s >= 50 ? "warn" : "bad"}" style="font-size:13px">${x.s}/100</span>
-      <button type="button" class="del-btn qz-del" data-i="${i}" aria-label="Padam">${ICONS.trash}</button>
-    </div>`).join("") : '<p class="empty" style="padding:20px 0">Tiada kuiz dicatat lagi.</p>';
-}
 
 function renderVocabTags() {
   const el = document.getElementById("vocabTags");
@@ -221,17 +200,6 @@ function markClassPresent() {
   renderTable();
 }
 
-function addQuiz() {
-  const d = document.getElementById("qzDate").value;
-  const t = document.getElementById("qzTitle").value.trim();
-  const sc = parseInt(document.getElementById("qzScore").value, 10);
-  if (!d || !t || isNaN(sc)) { sbmToast("Isi tajuk, tarikh dan markah kuiz"); return; }
-  editing.quizzes = editing.quizzes || [];
-  editing.quizzes.push({ d, t, s: Math.max(0, Math.min(100, sc)) });
-  renderQuizList();
-  document.getElementById("qzTitle").value = "";
-  document.getElementById("qzScore").value = "";
-}
 
 function addVocab() {
   const inp = document.getElementById("vocabWord");
@@ -291,13 +259,10 @@ function bindEditorEvents() {
     }
     const attDel = t.closest(".att-del");
     if (attDel) { editing.attendance.splice(+attDel.dataset.i, 1); renderAttList(); return; }
-    const qzDel = t.closest(".qz-del");
-    if (qzDel) { editing.quizzes.splice(+qzDel.dataset.i, 1); renderQuizList(); return; }
     const vDel = t.closest(".vocab-del");
     if (vDel) { editing.vocabulary.splice(+vDel.dataset.i, 1); renderVocabTags(); return; }
     if (t.closest("#addAttBtn")) return addAttendance();
     if (t.closest("#markAllPresentBtn")) return markClassPresent();
-    if (t.closest("#addQzBtn")) return addQuiz();
     if (t.closest("#addVocabBtn")) return addVocab();
     if (t.closest("#rmPhoto")) {
       pendingPhoto = null; editing.photo = ""; editing._photoRemoved = true;
@@ -831,7 +796,6 @@ function printStudentReport(s) {
   const totalLevels = DATA.meta.levels.length;
   const pct = totalLevels ? Math.round(((lv + 1) / totalLevels) * 100) : 0;
   const lastAtt = (s.attendance || []).slice().sort((a, b) => (a.d < b.d ? 1 : -1));
-  const quizes = (s.quizzes || []).slice().sort((a, b) => (a.d < b.d ? 1 : -1));
   const initials = s.name.replace(/binti|bin/gi, "").trim().split(/\s+/).slice(0, 2).map(w => w[0]).join("");
 
   const html = `
@@ -867,11 +831,6 @@ function printStudentReport(s) {
         th { background: #f8f9fa; font-weight: 600; }
         .present { color: #27ae60; font-weight: 600; }
         .absent { color: #e74c3c; font-weight: 600; }
-        .quiz-row { display: flex; align-items: center; gap: 10px; margin: 8px 0; }
-        .quiz-title { flex: 1; }
-        .quiz-bar { flex: 2; height: 10px; background: #ecf0f1; border-radius: 5px; overflow: hidden; }
-        .quiz-fill { height: 100%; border-radius: 5px; }
-        .quiz-score { width: 50px; text-align: right; font-weight: bold; }
         .vocab { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px; }
         .vocab span { background: #3498db; color: white; padding: 3px 10px; border-radius: 15px; font-size: 12px; }
         .footer { margin-top: 30px; text-align: center; color: #999; font-size: 12px; }
@@ -915,16 +874,6 @@ function printStudentReport(s) {
               <tr><td>${esc(fmtDate(a.d))}</td><td class="${a.s === "h" ? "present" : "absent"}">${a.s === "h" ? "Hadir" : "Tiada"}</td></tr>`).join("") : '<tr><td colspan="2">Tiada rekod</td></tr>'}
           </tbody>
         </table>
-      </div>
-
-      <div class="section">
-        <h3>📝 Keputusan Kuiz (Purata: ${quizAvg(s)} / 100)</h3>
-        ${quizes.length ? quizes.map(q => `
-          <div class="quiz-row">
-            <span class="quiz-title">${esc(q.t)}</span>
-            <div class="quiz-bar"><div class="quiz-fill" style="width: ${Math.min(q.s, 100)}%; background: ${q.s >= 75 ? "#27ae60" : q.s >= 50 ? "#f39c12" : "#e74c3c"}"></div></div>
-            <span class="quiz-score">${q.s}</span>
-          </div>`).join("") : '<p>Tiada rekod kuiz.</p>'}
       </div>
 
       <div class="section">
@@ -1001,14 +950,14 @@ async function archiveYear() {
 }
 
 function isLinus(s) {
-  // Flag if stuck at L1-L2 > 8 weeks (56 days) with low attendance/quiz
+  // Flag if stuck at L1-L2 > 8 weeks (56 days) with low attendance
   const lvl = s.currentLevel || 1;
   if (lvl > 2) return false;
   const firstAtt = (s.attendance||[]).slice().sort((a,b)=>a.d.localeCompare(b.d))[0];
   if (!firstAtt) return false;
   const days = Math.floor((Date.now() - new Date(firstAtt.d).getTime())/86400000);
   if (days < 56) return false;
-  return attendanceStats(s).pct < 70 || quizAvg(s) < 60;
+  return attendanceStats(s).pct < 70;
 }
 
 async function importApdmFile(file) {
@@ -1050,12 +999,12 @@ async function importApdmFile(file) {
 }
 
 function exportKpm() {
-  const rows = [["Bil","Nama Murid","Kelas","Tahap","Tahap Nama","% Hadir","Purata Kuiz","Status","IC"]];
+  const rows = [["Bil","Nama Murid","Kelas","Tahap","Tahap Nama","% Hadir","Kosa Kata","Status","IC"]];
   DATA.students.forEach((s,i) => {
     const att = attendanceStats(s);
     const lv = levelIndex(DATA, s);
     const status = isLinus(s) ? "Perlu Intervensi" : (checkLevelUp(DATA,s) ? "Sedia Naik" : "OK");
-    rows.push([i+1, s.name, s.class, s.currentLevel||1, DATA.meta.levels[lv].name, att.pct, quizAvg(s), status, s.ic||""]);
+    rows.push([i+1, s.name, s.class, s.currentLevel||1, DATA.meta.levels[lv].name, att.pct, (s.vocabulary||[]).length, status, s.ic||""]);
   });
   const ws = XLSX.utils.aoa_to_sheet(rows);
   ws["!cols"] = [{wch:4},{wch:28},{wch:12},{wch:7},{wch:18},{wch:8},{wch:10},{wch:16},{wch:14}];

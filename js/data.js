@@ -332,19 +332,18 @@ export function checkLevelUp(data, s) {
   const totalLevels = data.meta.levels.length;
   if (currentLevel >= totalLevels) return null;
   
-  const avgQuiz = quizAvg(s);
+  // Based on attendance only (quiz feature removed):
+  // at least 8 sessions recorded and 80%+ attendance.
   const att = attendanceStats(s);
   const attendancePct = att.pct;
-  const recentQuizzes = (s.quizzes || []).slice().sort((a, b) => (a.d < b.d ? 1 : -1)).slice(0, 3);
-  const recentAvg = recentQuizzes.length ? Math.round(recentQuizzes.reduce((a, q) => a + q.s, 0) / recentQuizzes.length) : 0;
   
-  const ready = avgQuiz >= 75 && attendancePct >= 80 && recentAvg >= 75;
+  const ready = att.total >= 8 && attendancePct >= 80;
   if (!ready) return null;
   
   return {
     nextLevel: currentLevel + 1,
     nextLevelName: data.meta.levels[currentLevel].name,
-    reason: `Purata kuiz ${avgQuiz}%, Kehadiran ${attendancePct}%, 3 kuiz terkini ${recentAvg}%`
+    reason: `Kehadiran ${attendancePct}% daripada ${att.total} sesi`
   };
 }
 

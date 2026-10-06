@@ -1,4 +1,4 @@
-const CACHE_NAME = 'bijak-membaca-v5';
+const CACHE_NAME = 'bijak-membaca-v7';
 const STATIC_ASSETS = [
   './',
   './index.html',
@@ -13,6 +13,7 @@ const STATIC_ASSETS = [
   './js/ui.js',
   './icons/apple-touch-icon.png',
   './icons/icon-192.png',
+  './icons/logo.png',
   './js/sample.js',
   './js/lib/papaparse.min.js',
   './data/students.json'
