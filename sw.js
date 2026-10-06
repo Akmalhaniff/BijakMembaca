@@ -1,4 +1,4 @@
-const CACHE_NAME = 'bijak-membaca-v4';
+const CACHE_NAME = 'bijak-membaca-v5';
 const STATIC_ASSETS = [
   './',
   './index.html',

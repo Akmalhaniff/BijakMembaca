@@ -1,9 +1,38 @@
 {
   "hosting": {
     "public": ".",
-    "ignore": ["firebase.json", "**/.*", "**/node_modules/**", "functions/**"],
-    "cleanUrls": true
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**",
+      "functions/**"
+    ],
+    "cleanUrls": true,
+    "rewrites": [
+      {
+        "source": "/adminparent",
+        "destination": "/parent.html"
+      },
+      {
+        "source": "/adminparent.html",
+        "destination": "/parent.html"
+      }
+    ]
   },
-  "functions": [{ "source": "functions", "codebase": "default", "ignore": ["node_modules", ".git", "firebase-debug.log", "firebase-debug.*.log"] }],
-  "firestore": { "rules": "firestore.rules", "indexes": "firestore.indexes.json" }
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log"
+      ]
+    }
+  ],
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  }
 }
