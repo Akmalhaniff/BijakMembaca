@@ -2,108 +2,111 @@
 <html lang="ms">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Program Bijak Membaca — SMK Puncak Alam 3</title>
+  <meta name="theme-color" content="#f6f4f0">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Bijak Membaca">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="icon" type="image/png" href="icons/icon-192.png">
+  <link rel="manifest" href="manifest.json">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
-  <link rel="manifest" href="manifest.json">
-  <meta name="theme-color" content="#0e7490">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230e7490'/><text x='50' y='62' text-anchor='middle' font-size='48' font-weight='800' fill='white'>BM</text></svg>">
+  <script>try{var d=localStorage.getItem('sbm_dark_mode');if(d==='true'||(d===null&&matchMedia('(prefers-color-scheme: dark)').matches))document.documentElement.classList.add('dark')}catch(e){}</script>
 </head>
 <body>
 
-  <header class="site">
+  <header class="appbar">
     <div class="wrap">
-      <div class="emblem">BM</div>
-      <div class="titles">
-        <h1 id="schoolName">SMK Puncak Alam 3</h1>
-        <p id="programName">Program Bijak Membaca</p>
+      <a class="brand" href="index.html">
+        <span class="brand-mark" data-icon="book"></span>
+        <span class="brand-text">
+          <b id="schoolName">SMK Puncak Alam 3</b>
+          <small id="programName">Program Bijak Membaca</small>
+        </span>
+      </a>
+      <div class="appbar-actions">
+        <button class="icon-btn" data-dark-toggle aria-label="Tukar mod gelap/terang"></button>
+        <div id="navRight"></div>
       </div>
     </div>
-    <nav class="tabs no-print">
-      <a href="index.html" class="on">Dashboard</a>
-      <a href="admin.html" data-auth="user">Panel Guru</a>
-      <div id="navRight" style="margin-left:auto;display:flex;gap:8px;align-items:center">
-        <a href="login.html" data-auth="guest" class="btn ghost sm" style="background:rgba(255,255,255,.15);color:#fff;border-color:rgba(255,255,255,.25)">Log Masuk</a>
-      </div>
-      <button class="btn ghost sm" data-dark-toggle aria-label="Tukar mod gelap/terang" style="background:rgba(255,255,255,.12);color:#fff;border-color:rgba(255,255,255,.2);min-width:36px;justify-content:center;margin-left:8px;flex:0 0 auto"></button>
-    </nav>
   </header>
 
-  <main class="wrap">
+  <main class="page wrap">
     <section class="hero" aria-labelledby="heroTitle">
-      <div class="hero-content">
-        <h2 id="heroTitle">Laporan Kemajuan Murid</h2>
-        <p class="hero-lead">
-          Portal ini memaparkan perkembangan kemahiran membaca murid-murid
-          yang menyertai <strong>Program Bijak Membaca</strong>. Ibu bapa boleh
-          memantau kemajuan anak masing-masing manakala pihak sekolah boleh
-          melihat pencapaian keseluruhan program.
-        </p>
-        <div class="meta" role="list">
-          <span role="listitem" id="metaTotal">0 murid</span>
-          <span role="listitem" id="metaLevels">0 tahap</span>
-          <span role="listitem" id="metaYear">Tahun 2026</span>
+      <div class="hero-row">
+        <div>
+          <div class="eyebrow" id="heroEyebrow">Laporan Kemajuan</div>
+          <h1 id="heroTitle">Laporan Kemajuan Murid</h1>
+          <p id="heroLead">Pantau perkembangan kemahiran membaca setiap murid dalam satu paparan.</p>
         </div>
+        <div class="ring" id="heroRing" aria-label="Purata tahap bacaan">
+          <svg viewBox="0 0 100 100"><circle class="ring-track" cx="50" cy="50" r="42" fill="none" stroke-width="9"/><circle class="ring-val" id="ringVal" cx="50" cy="50" r="42" fill="none" stroke-width="9" stroke-dasharray="263.9" stroke-dashoffset="263.9"/></svg>
+          <div class="ring-label"><div><b id="ringNum">0</b><small>TAHAP</small></div></div>
+        </div>
+      </div>
+      <div class="chips-glass" role="list">
+        <span role="listitem" id="metaTotal">0 murid</span>
+        <span role="listitem" id="metaLevels">0 tahap</span>
+        <span role="listitem" id="metaYear">Tahun 2026</span>
       </div>
     </section>
 
-    <div class="card">
-      <div class="stats grid">
-        <div class="stat">
-          <div class="num" id="stTotal">0</div>
-          <div class="lbl">Jumlah Murid</div>
-        </div>
-        <div class="stat">
-          <div class="num" id="stAvgLevel">0</div>
-          <div class="lbl">Purata Tahap Bacaan</div>
-        </div>
-        <div class="stat">
-          <div class="num" id="stAvgAtt">0%</div>
-          <div class="lbl">Purata Kehadiran</div>
-        </div>
-        <div class="stat">
-          <div class="num" id="stAvgQuiz">0</div>
-          <div class="lbl">Purata Skor Kuiz</div>
-        </div>
+    <div class="stats">
+      <div class="stat t-violet"><div class="ic" data-icon="users"></div><div><div class="num" id="stTotal">0</div><div class="lbl">Jumlah murid</div></div></div>
+      <div class="stat t-peach"><div class="ic" data-icon="layers"></div><div><div class="num" id="stAvgLevel">0</div><div class="lbl">Purata tahap</div></div></div>
+      <div class="stat t-mint"><div class="ic" data-icon="cal"></div><div><div class="num" id="stAvgAtt">0%</div><div class="lbl">Purata kehadiran</div></div></div>
+      <div class="stat t-gold"><div class="ic" data-icon="star"></div><div><div class="num" id="stAvgQuiz">0</div><div class="lbl">Purata kuiz</div></div></div>
+    </div>
+
+    <div class="sec-head"><h2>Analitik</h2><small>Taburan semasa</small></div>
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr))">
+      <div class="card">
+        <div class="card-title"><span class="ic" data-icon="chart"></span>Taburan tahap bacaan</div>
+        <div class="chart-box"><canvas id="levelChart"></canvas></div>
+      </div>
+      <div class="card" style="margin-top:0">
+        <div class="card-title"><span class="ic" data-icon="cal"></span>Taburan kehadiran</div>
+        <div class="chart-box"><canvas id="attChart"></canvas></div>
       </div>
     </div>
 
-    <div class="card" style="margin-bottom:16px">
-      <h3 style="font-size:15px;margin-bottom:12px">📊 Analitik Program</h3>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px">
-        <div><canvas id="levelChart" height="200"></canvas></div>
-        <div><canvas id="attChart" height="200"></canvas></div>
-      </div>
+    <div class="sec-head"><h2>Murid</h2><small id="listCount"></small></div>
+    <div class="toolbar no-print" style="margin-top:0">
+      <label class="search">
+        <span data-icon="search"></span>
+        <input type="search" id="searchBox" placeholder="Cari nama murid…" autocomplete="off" enterkeyhint="search">
+      </label>
+      <button class="icon-btn" id="printBtn" aria-label="Cetak" data-icon="print" style="width:46px;height:46px;border-radius:16px"></button>
     </div>
-
-    <div class="toolbar no-print">
-      <div class="searchbox">
-        <input type="search" id="searchBox" placeholder="Cari nama murid...">
-      </div>
-      <select id="classFilter">
-        <option value="">Semua Kelas</option>
-      </select>
-      <button class="btn ghost" id="printBtn">Cetak / Papar</button>
-    </div>
+    <div class="chips no-print" id="classChips" role="tablist" aria-label="Tapis kelas"></div>
+    <select id="classFilter" class="hidden" aria-hidden="true"><option value="">Semua Kelas</option></select>
 
     <div id="classBlocks"></div>
-    <div class="card empty" id="emptyState" style="display:none;">
-      <div class="big">🔍</div>
-      Tiada murid ditemui. Cuba tukar carian atau penapis kelas.
-    </div>
+    <div class="card empty" id="emptyState" style="display:none;margin-top:14px"></div>
 
-    <h2 class="sec">Penerangan Tahap Bacaan</h2>
+    <div class="sec-head"><h2>Perjalanan Tahap</h2><small>Dari asas ke mahir</small></div>
     <div class="card" id="levelsDesc"></div>
+
+    <footer class="site" style="margin-top:26px">© <span id="footYear"></span> SMK Puncak Alam 3 · Program Bijak Membaca</footer>
   </main>
 
+  <nav class="tabbar no-print" aria-label="Navigasi utama">
+    <a href="index.html" class="on"><span data-icon="home"></span>Utama</a>
+    <a href="admin.html" data-auth="user" style="display:none"><span data-icon="users"></span>Murid</a>
+    <a href="admin.html#hadir" data-auth="user" style="display:none"><span data-icon="check"></span>Kehadiran</a>
+    <a href="admin.html#tetapan" data-auth="user" style="display:none"><span data-icon="cog"></span>Tetapan</a>
+    <a href="login.html" data-auth="guest"><span data-icon="login"></span>Log Masuk</a>
+  </nav>
+
   <div class="modal-bg" id="modalBg">
-    <div class="modal">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
       <div class="modal-head">
-        <h3>Kemajuan Murid</h3>
+        <h3 id="modalTitle">Kemajuan Murid</h3>
         <button class="x" id="closeModal" aria-label="Tutup">×</button>
       </div>
       <div class="modal-body" id="modalBody"></div>
@@ -113,13 +116,7 @@
     </div>
   </div>
 
-  <footer class="site">
-    © <span id="footYear"></span> <b>SMK Puncak Alam 3</b> — Program Bijak Membaca. Dibina untuk kemajuan pembelajaran.
-  </footer>
-
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <script type="module" src="js/sample.js"></script>
-  <script type="module" src="js/data.js"></script>
   <script type="module" src="js/darkmode.js"></script>
   <script type="module" src="js/app.js"></script>
   <script>

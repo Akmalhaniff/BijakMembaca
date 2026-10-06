@@ -2,147 +2,228 @@
 <html lang="ms">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Admin — Program Bijak Membaca</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Panel Guru — Program Bijak Membaca</title>
+  <meta name="theme-color" content="#f6f4f0">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Bijak Membaca">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="icon" type="image/png" href="icons/icon-192.png">
+  <link rel="manifest" href="manifest.json">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
-  <link rel="manifest" href="manifest.json">
-  <meta name="theme-color" content="#0e7490">
-  <meta name="apple-mobile-web-app-capable" content="yes">
+  <script>try{var d=localStorage.getItem('sbm_dark_mode');if(d==='true'||(d===null&&matchMedia('(prefers-color-scheme: dark)').matches))document.documentElement.classList.add('dark')}catch(e){}</script>
 </head>
 <body>
 
-  <header class="site">
+  <header class="appbar">
     <div class="wrap">
-      <div class="emblem">BM</div>
-      <div class="titles">
-        <h1>Panel Guru</h1>
-        <p id="programName">Program Bijak Membaca</p>
-      </div>
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end">
-        <span id="userName" style="font-size:13px;color:#fff;font-weight:600;background:rgba(255,255,255,.15);padding:6px 10px;border-radius:99px;display:inline-flex;align-items:center;gap:6px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
-        <button class="btn ghost sm" data-logout style="background:rgba(255,255,255,.15);color:#fff;border-color:rgba(255,255,255,.25)">Log Keluar</button>
-        <button class="btn ghost sm" data-dark-toggle aria-label="Tukar mod gelap/terang" style="background:rgba(255,255,255,.12);color:#fff;border-color:rgba(255,255,255,.2);min-width:36px;justify-content:center"></button>
+      <a class="brand" href="index.html">
+        <span class="brand-mark" data-icon="book"></span>
+        <span class="brand-text">
+          <b>Panel Guru</b>
+          <small id="programName">Program Bijak Membaca</small>
+        </span>
+      </a>
+      <div class="appbar-actions">
+        <button class="icon-btn" data-dark-toggle aria-label="Tukar mod gelap/terang"></button>
+        <button class="me-chip" id="userName" data-logout aria-label="Log keluar"></button>
       </div>
     </div>
-    <nav class="tabs no-print">
-      <a href="index.html">Dashboard</a>
-      <a href="admin.html" class="on">Admin</a>
-    </nav>
   </header>
 
-  <main id="adminMain" class="wrap" style="display:none">
+  <div id="loadingState" class="wrap" style="padding-top:40px">
+    <div class="card empty"><div class="big">📚</div>Memuatkan data murid…</div>
+  </div>
 
-    <div class="adminbar">
-      <div class="left" style="flex:1;min-width:240px">
-        <input type="search" id="adminSearch" placeholder="Cari nama murid..." style="flex:1;min-width:160px">
-        <select id="classFilter">
-          <option value="">Semua Kelas</option>
-        </select>
-        <select id="sortBy">
-          <option value="name">Nama A-Z</option>
+  <main id="adminMain" class="page wrap" style="display:none">
+
+    <!-- ============ VIEW: MURID ============ -->
+    <section id="viewMurid">
+      <div class="hero" id="adminHero" style="padding-bottom:20px"></div>
+
+      <div id="onboardingCard" class="card no-print" style="display:none;margin-top:14px"></div>
+
+      <button class="btn grad block no-print" id="quickAttBtn" style="margin-top:14px;min-height:54px;border-radius:18px">
+        <span data-icon="check"></span> Rekod kehadiran hari ini
+      </button>
+
+      <div class="toolbar no-print">
+        <label class="search">
+          <span data-icon="search"></span>
+          <input type="search" id="adminSearch" placeholder="Cari murid…" autocomplete="off" enterkeyhint="search">
+        </label>
+        <select id="sortBy" aria-label="Susun" style="width:auto;flex:0 0 auto;border-radius:16px;background-color:var(--surface)">
+          <option value="name">A–Z</option>
           <option value="level">Tahap</option>
-          <option value="att">Kehadiran</option>
+          <option value="att">Hadir</option>
         </select>
+        <button class="icon-btn" id="selectModeBtn" aria-label="Pilih beberapa murid" data-icon="select" style="width:46px;height:46px;border-radius:16px"></button>
       </div>
-      <div class="left no-print">
-        <button class="btn no-print" id="addStudentBtn">+ Tambah Murid</button>
-        <button class="btn ghost sm" id="importCsvBtn">Import CSV</button>
-        <input type="file" id="importCsvFile" accept=".csv" hidden>
-        <button class="btn ghost sm" id="previewBtn">Lihat Dashboard</button>
+      <div class="chips no-print" id="classChips" aria-label="Tapis kelas"></div>
+      <select id="classFilter" class="hidden" aria-hidden="true"><option value="">Semua Kelas</option></select>
+
+      <div id="tableWrap" style="margin-top:10px"></div>
+    </section>
+
+    <!-- ============ VIEW: TETAPAN ============ -->
+    <section id="viewTetapan" class="hidden">
+      <div class="hero" style="padding-bottom:20px">
+        <div class="eyebrow">Alat & tetapan</div>
+        <h1>Tetapan</h1>
+        <p>Import senarai murid, eksport laporan, dan ubah tahap bacaan program.</p>
       </div>
-    </div>
-    <div class="adminbar no-print" style="justify-content:flex-start">
-      <button class="btn ghost sm" id="bulkPromoteBtn" disabled>⬆️ Naik Tahap Terpilih</button>
-      <button class="btn ghost sm" id="promoteClassBtn">🎓 Naik Kelas</button>
-      <button class="btn ghost sm" id="archiveYearBtn">📦 Arkib Tahun</button>
-      <button class="btn ghost sm" id="posterBtn">🖼️ Poster A3</button>
-      <button class="btn ghost sm" id="transferBtn" style="display:none">🔀 Pindah Guru</button>
-      <button class="btn ghost sm" id="importApdmBtn">📥 Import APDM</button>
+
+      <div class="sec-head"><h2>Import & Eksport</h2></div>
+      <div class="tools no-print">
+        <button class="tool" id="importApdmBtn"><span class="ic">📥</span><div><b>Import APDM</b><small>Fail Excel .xlsx</small></div></button>
+        <button class="tool" id="importCsvBtn"><span class="ic">🧾</span><div><b>Import CSV</b><small>Lajur nama, kelas</small></div></button>
+        <button class="tool" id="exportKpmBtn"><span class="ic">📊</span><div><b>Eksport KPM</b><small>Excel laporan</small></div></button>
+        <button class="tool" id="exportPbdBtn"><span class="ic">📝</span><div><b>Eksport PBD</b><small>CSV DELIMa</small></div></button>
+        <button class="tool" id="exportBtn"><span class="ic">💾</span><div><b>Backup JSON</b><small>Muat turun salinan</small></div></button>
+        <button class="tool" id="importBtn"><span class="ic">♻️</span><div><b>Pulih JSON</b><small>Dari fail backup</small></div></button>
+      </div>
       <input type="file" id="importApdmFile" accept=".xlsx,.xls" hidden>
-      <button class="btn ghost sm" id="exportKpmBtn">📊 Eksport KPM</button>
-      <button class="btn ghost sm" id="exportPbdBtn">📝 Eksport PBD</button>
-    </div>
-    <div id="onboardingCard" class="card no-print" style="display:none;border:2px dashed var(--accent);background:#fffbeb"></div>
+      <input type="file" id="importCsvFile" accept=".csv,text/csv" hidden>
+      <input type="file" id="importFile" accept=".json,application/json" hidden>
 
-    <div id="tableWrap"></div>
+      <div class="sec-head"><h2>Urus Kelas</h2></div>
+      <div class="tools no-print">
+        <button class="tool" id="promoteClassBtn"><span class="ic">🎓</span><div><b>Naik Kelas</b><small>Tukar nama kelas</small></div></button>
+        <button class="tool" id="posterBtn"><span class="ic">🖼️</span><div><b>Poster A3</b><small>Cetak kemajuan kelas</small></div></button>
+        <button class="tool" id="archiveYearBtn"><span class="ic">📦</span><div><b>Arkib Tahun</b><small>Mula tahun baru</small></div></button>
+        <button class="tool" id="previewBtn"><span class="ic">📈</span><div><b>Dashboard</b><small>Lihat analitik</small></div></button>
+      </div>
 
-    <h2 class="sec no-print">Tetapan Program</h2>
-    <div class="card no-print">
-      <div class="form-grid">
-        <div class="field">
-          <label>Nama Sekolah</label>
-          <input type="text" id="setSchool">
+      <div class="sec-head"><h2>Program</h2></div>
+      <div class="card no-print">
+        <div class="form-grid">
+          <div class="field full">
+            <label for="setSchool">Nama sekolah</label>
+            <input type="text" id="setSchool">
+          </div>
+          <div class="field">
+            <label for="setProgram">Nama program</label>
+            <input type="text" id="setProgram">
+          </div>
+          <div class="field">
+            <label for="setYear">Tahun</label>
+            <input type="text" id="setYear" inputmode="numeric">
+          </div>
         </div>
-        <div class="field">
-          <label>Nama Program</label>
-          <input type="text" id="setProgram">
-        </div>
-        <div class="field">
-          <label>Tahun</label>
-          <input type="text" id="setYear">
-        </div>
-        <div class="field full">
-          <label>Tahap Bacaan (nama setiap tahap)</label>
+        <div class="field" style="margin-top:18px">
+          <label>Tahap bacaan</label>
           <div id="levelInputs"></div>
         </div>
+        <button class="btn block" id="saveSettingsBtn" style="margin-top:16px">Simpan tetapan</button>
       </div>
-      <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
-        <button class="btn" id="saveSettingsBtn">Simpan Tetapan</button>
-        <button class="btn danger" id="resetBtn">Reset kepada Data Contoh</button>
-      </div>
-    </div>
 
+      <div class="sec-head"><h2>Akaun</h2></div>
+      <div class="card">
+        <div class="profile-head" id="acctInfo"></div>
+        <button class="btn ghost block" data-logout style="margin-top:16px"><span data-icon="logout"></span> Log keluar</button>
+      </div>
+
+      <div class="card" style="margin-top:12px;border-color:var(--bad-soft)">
+        <div class="card-title" style="color:var(--bad);margin-bottom:6px">Zon bahaya</div>
+        <p class="muted" style="font-size:13px;margin-bottom:12px">Kosongkan semua data murid dan kembalikan tetapan asal.</p>
+        <button class="btn danger block" id="resetBtn">Kosongkan semua data</button>
+      </div>
+    </section>
+
+    <footer class="site" style="margin-top:26px">SMK Puncak Alam 3 · Panel Guru Program Bijak Membaca</footer>
   </main>
 
+  <button class="fab no-print" id="addStudentBtn" aria-label="Tambah murid" data-icon="plus"></button>
+
+  <div class="select-bar hidden no-print" id="selectBar">
+    <b id="selCount">0 dipilih</b>
+    <button class="btn sm amber" id="bulkPromoteBtn" disabled>⬆️ Naik tahap</button>
+    <button class="btn sm soft" id="transferBtn" style="display:none">🔀 Pindah</button>
+    <button class="btn sm ghost" id="selCancelBtn">Batal</button>
+  </div>
+
+  <nav class="tabbar no-print" aria-label="Navigasi utama">
+    <a href="index.html"><span data-icon="home"></span>Utama</a>
+    <a href="admin.html" data-view="murid" class="on"><span data-icon="users"></span>Murid</a>
+    <a href="admin.html#hadir" id="tabHadir"><span data-icon="check"></span>Kehadiran</a>
+    <a href="admin.html#tetapan" data-view="tetapan"><span data-icon="cog"></span>Tetapan</a>
+  </nav>
+
+  <!-- Edit / add student -->
   <div class="modal-bg" id="editModalBg">
-    <div class="modal" style="max-width:820px">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="editTitle">
       <div class="modal-head">
         <h3 id="editTitle">Edit Murid</h3>
-        <button class="x" data-close="edit">×</button>
+        <button class="x" data-close="edit" aria-label="Tutup">×</button>
       </div>
       <div class="modal-body" id="editBody"></div>
       <div class="modal-foot no-print">
-        <button class="btn danger" id="deleteStudentBtn">Padam Murid</button>
-        <button class="btn ghost" data-close="edit">Tutup</button>
-        <button class="btn ghost" id="printReportBtn">🖨 Cetak Laporan</button>
+        <button class="btn danger icon-only" id="deleteStudentBtn" aria-label="Padam murid" data-icon="trash"></button>
+        <button class="btn ghost icon-only" id="printReportBtn" aria-label="Cetak laporan" data-icon="print"></button>
         <button class="btn" id="saveStudentBtn">Simpan</button>
       </div>
     </div>
   </div>
 
-  <div class="modal-bg" id="qrModalBg">
-    <div class="modal" style="max-width:380px;text-align:center">
+  <!-- Quick attendance -->
+  <div class="modal-bg" id="attendModalBg">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="attendTitle">
       <div class="modal-head">
-        <h3>Kongsi ke Ibu Bapa</h3>
-        <button class="x" data-close="qr">×</button>
+        <h3 id="attendTitle">Rekod Kehadiran</h3>
+        <button class="x" data-close="attend" aria-label="Tutup">×</button>
       </div>
       <div class="modal-body">
-        <div id="qrCode" style="display:flex;justify-content:center;padding:12px"></div>
-        <p id="qrUrl" style="font-size:12px;color:var(--muted);word-break:break-all;margin-top:8px"></p>
-        <div style="display:flex;gap:8px;justify-content:center;margin-top:12px;flex-wrap:wrap">
-          <button class="btn sm" id="qrCopyBtn">Salin Pautan</button>
-          <button class="btn sm ghost" id="qrWaBtn">Buka WhatsApp</button>
+        <div class="row-input">
+          <input type="date" id="qaDate" style="flex:1">
+          <button class="btn soft" id="qaAllBtn">✓ Semua hadir</button>
         </div>
+        <div class="chips" id="qaChips" style="margin-top:12px"></div>
+        <p class="muted" id="qaSummary" style="font-size:12.5px;font-weight:700;margin:6px 2px 0"></p>
+        <div id="qaList" style="margin-top:4px"></div>
       </div>
       <div class="modal-foot no-print">
-        <button class="btn ghost" data-close="qr">Tutup</button>
+        <button class="btn ghost" data-close="attend">Batal</button>
+        <button class="btn" id="qaSaveBtn">Simpan kehadiran</button>
       </div>
     </div>
   </div>
 
-  <div class="modal-bg" id="transferModalBg">
-    <div class="modal" style="max-width:420px">
+  <!-- Share to parents -->
+  <div class="modal-bg" id="qrModalBg">
+    <div class="modal" role="dialog" aria-modal="true" style="max-width:420px">
       <div class="modal-head">
-        <h3>🔀 Pindah Murid ke Guru Lain</h3>
-        <button class="x" data-close="transfer">×</button>
+        <h3>Kongsi ke Ibu Bapa</h3>
+        <button class="x" data-close="qr" aria-label="Tutup">×</button>
+      </div>
+      <div class="modal-body" style="text-align:center">
+        <div id="qrName" style="display:flex;align-items:center;gap:12px;justify-content:center"></div>
+        <div id="qrCode" style="display:flex;justify-content:center;margin:16px auto 0;padding:14px;background:#fff;border-radius:20px;width:max-content"></div>
+        <p id="qrUrl" class="muted" style="font-size:11.5px;word-break:break-all;margin-top:10px"></p>
+        <div class="stack" style="margin-top:14px">
+          <button class="btn good" id="qrWaBtn">💬 Hantar melalui WhatsApp</button>
+          <button class="btn soft hidden" id="qrShareBtn"><span data-icon="share"></span> Kongsi…</button>
+          <button class="btn ghost" id="qrCopyBtn"><span data-icon="link"></span> Salin pautan</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Transfer (superadmin) -->
+  <div class="modal-bg" id="transferModalBg">
+    <div class="modal" role="dialog" aria-modal="true" style="max-width:440px">
+      <div class="modal-head">
+        <h3>Pindah ke Guru Lain</h3>
+        <button class="x" data-close="transfer" aria-label="Tutup">×</button>
       </div>
       <div class="modal-body">
-        <p style="font-size:13px;color:var(--muted)">Pilih guru destinasi untuk <span id="transferCount">0</span> murid terpilih.</p>
-        <select id="transferTeacher" style="width:100%;margin-top:8px"></select>
-        <p style="font-size:12px;color:var(--muted);margin-top:8px">Hanya superadmin boleh pindah antara guru.</p>
+        <p class="muted" style="font-size:13.5px">Pilih guru destinasi untuk <b id="transferCount">0</b> murid terpilih.</p>
+        <select id="transferTeacher" style="margin-top:10px"></select>
+        <p class="muted" style="font-size:12px;margin-top:8px">Hanya superadmin boleh pindah antara guru.</p>
       </div>
       <div class="modal-foot no-print">
         <button class="btn ghost" data-close="transfer">Batal</button>
@@ -151,16 +232,9 @@
     </div>
   </div>
 
-  <footer class="site">
-    <b>SMK Puncak Alam 3</b> — Panel Guru Program Bijak Membaca
-  </footer>
-
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script type="module" src="js/sample.js"></script>
-  <script type="module" src="js/data.js"></script>
-  <script type="module" src="js/lib/papaparse.min.js"></script>
+  <script src="js/lib/papaparse.min.js"></script>
   <script type="module" src="js/darkmode.js"></script>
   <script type="module" src="js/admin.js"></script>
   <script>

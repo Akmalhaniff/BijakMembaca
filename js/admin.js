@@ -1,339 +1,542 @@
 import { loadData, saveData, sbmToast, downloadJSON, classesOf, attendanceStats, levelIndex, quizAvg, checkLevelUp, esc, fmtDate, uid, defaultData, getCurrentUser, onAuthChange, isSuperAdmin, getAllTeachers, deleteTeacherData, sendTeacherPasswordReset, logoutUser, db } from './data.js';
 import { doc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { ICONS, avatar, levelPill, levelHue, meterClass, greeting, todayISO, hydrateIcons } from './ui.js';
 
 let DATA = null;
 let filterClass = "";
 let filterText = "";
 let sortBy = "name";
 let selectedIds = new Set();
+let selectMode = false;
 let editing = null;
+let editTab = "profil";
+let pendingPhoto = null;
+let wired = false;
 
 // Global logout - works even before wireAdmin / even if init fails
 document.addEventListener("click", async (e) => {
   const btn = e.target.closest("[data-logout]");
   if (!btn) return;
   e.preventDefault();
+  if (!confirm("Log keluar dari Panel Guru?")) return;
   try { await logoutUser(); } catch (err) { console.error(err); }
   window.location.href = "index.html";
 });
 
-/* ---------------- helpers ---------------- */
+function shareUrlFor(s) {
+  return `${location.origin}${location.pathname.replace(/admin(\.html)?$/, "")}parent.html?student=${encodeURIComponent(s.id)}`;
+}
+function shareTextFor(s) {
+  const lv = levelIndex(DATA, s);
+  return `📚 *Laporan Kemajuan ${s.name}*\n` +
+    `Kelas: ${s.class}\n` +
+    `Tahap: ${DATA.meta.levels[lv].name}\n` +
+    `Kehadiran: ${attendanceStats(s).pct}%\n` +
+    `Purata Kuiz: ${quizAvg(s)}/100\n\n` +
+    `Lihat penuh: ${shareUrlFor(s)}\n` +
+    `_${DATA.meta.programName} - ${DATA.meta.schoolName}_`;
+}
+
+async function persist(msg) {
+  await saveData(DATA);
+  if (msg) sbmToast(msg);
+}
+
+/* ---------------- views (Murid / Tetapan) ---------------- */
+
+function setView(v) {
+  const isSet = v === "tetapan";
+  document.getElementById("viewMurid").classList.toggle("hidden", isSet);
+  document.getElementById("viewTetapan").classList.toggle("hidden", !isSet);
+  document.getElementById("addStudentBtn").classList.toggle("hidden", isSet);
+  document.querySelectorAll(".tabbar [data-view]").forEach(t => t.classList.toggle("on", t.dataset.view === v));
+  if (isSet && selectMode) toggleSelectMode(false);
+  history.replaceState(null, "", isSet ? "#tetapan" : location.pathname + location.search);
+  window.scrollTo({ top: 0 });
+}
+
+/* ---------------- student editor (bottom sheet) ---------------- */
 
 function renderEditForm() {
   const s = editing;
-  const body = document.getElementById("editBody");
-  const photoPreview = s.photo ? `<img src="${esc(s.photo)}" alt="${esc(s.name)}" style="width:80px;height:80px;border-radius:50%;object-fit:cover;margin-top:8px;border:2px solid var(--primary)">` : '';
+  const isNew = !DATA.students.some(x => x.id === s.id);
   const levelUp = checkLevelUp(DATA, s);
-  const levelUpBadge = levelUp ? `<span class="levelpill" style="background:#e8f8f5;color:var(--good);margin-left:8px;cursor:help" title="${esc(levelUp.reason)}">🎓 Sedia naik ke Tahap ${levelUp.nextLevel}</span>` : '';
-  body.innerHTML = `
-    <div class="form-grid">
-      <div class="field">
-        <label>Nama Penuh</label>
-        <input type="text" id="inName" value="${esc(s.name)}">
+  const classes = classesOf(DATA);
+  const photoSrc = pendingPhoto || s.photo;
+  const tabs = [["profil", "Profil"], ["hadir", "Kehadiran"], ["kuiz", "Kuiz"], ["kata", "Kosa Kata"]];
+  document.getElementById("deleteStudentBtn").classList.toggle("hidden", isNew);
+  document.getElementById("printReportBtn").classList.toggle("hidden", isNew);
+
+  document.getElementById("editBody").innerHTML = `
+    <div class="seg" role="tablist">
+      ${tabs.map(([k, l]) => `<button type="button" data-tab="${k}" class="${editTab === k ? "on" : ""}">${l}</button>`).join("")}
+    </div>
+
+    <div class="seg-pane ${editTab === "profil" ? "on" : ""}" data-pane="profil">
+      <div class="photo-pick">
+        <div id="photoPreview">${avatar({ name: s.name || "?", photo: photoSrc }, "xl")}</div>
+        <div>
+          <label class="btn soft sm" for="inPhoto">📷 ${photoSrc ? "Tukar gambar" : "Tambah gambar"}</label>
+          <input type="file" id="inPhoto" accept="image/*" hidden>
+          ${photoSrc ? `<button type="button" class="btn ghost sm" id="rmPhoto" style="margin-left:6px">Buang</button>` : ""}
+          <p class="muted" style="font-size:12px;margin-top:6px;font-weight:600">Gambar dikecilkan secara automatik.</p>
+        </div>
       </div>
-      <div class="field">
-        <label>Kelas</label>
-        <input type="text" id="inClass" value="${esc(s.class)}">
-      </div>
-      <div class="field">
-        <label>Jantina</label>
-        <select id="inGender">
-          <option value="P" ${s.gender === "P" ? "selected" : ""}>Perempuan</option>
-          <option value="L" ${s.gender === "L" ? "selected" : ""}>Lelaki</option>
-        </select>
-      </div>
-      <div class="field">
-        <label>Tahap Semasa</label>
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-          <select id="inLevel" style="flex:1">
+      <div class="form-grid" style="margin-top:16px">
+        <div class="field full">
+          <label for="inName">Nama penuh</label>
+          <input type="text" id="inName" value="${esc(s.name)}" autocomplete="off" autocapitalize="words" placeholder="cth: Aisyah binti Ahmad">
+        </div>
+        <div class="field">
+          <label for="inClass">Kelas</label>
+          <input type="text" id="inClass" value="${esc(s.class)}" list="classList" autocomplete="off" placeholder="cth: 1 Arif">
+          <datalist id="classList">${classes.map(c => `<option value="${esc(c)}">`).join("")}</datalist>
+        </div>
+        <div class="field">
+          <label for="inGender">Jantina</label>
+          <select id="inGender">
+            <option value="P" ${s.gender === "P" ? "selected" : ""}>Perempuan</option>
+            <option value="L" ${s.gender === "L" ? "selected" : ""}>Lelaki</option>
+          </select>
+        </div>
+        <div class="field full">
+          <label for="inLevel">Tahap semasa</label>
+          <select id="inLevel">
             ${DATA.meta.levels.map((l, i) => `<option value="${i + 1}" ${(s.currentLevel || 1) === i + 1 ? "selected" : ""}>Tahap ${i + 1} — ${esc(l.name)}</option>`).join("")}
           </select>
-          ${levelUpBadge}
         </div>
       </div>
+      ${levelUp ? `<div class="banner"><span class="emo">🎓</span><div><b>Sedia naik ke Tahap ${levelUp.nextLevel}</b><small>${esc(levelUp.reason)}</small></div></div>` : ""}
+    </div>
 
-      <div class="field full">
-        <label>Gambar Murid</label>
-        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-          <div id="photoPreview">${photoPreview}</div>
-          <input type="file" id="inPhoto" accept="image/*" style="flex:1">
-          <small style="color:var(--muted)">Maks 500KB. Akan disimpan sebagai base64.</small>
-        </div>
-      </div>
-
-      <div class="full">
-        <div class="mini">
-          <h5>Kehadiran Sesi</h5>
-          <div id="attList"></div>
-          <div class="editor-row" style="margin-top:10px">
-            <input type="date" id="attDate" value="${new Date().toISOString().slice(0, 10)}">
-            <select id="attStatus">
-              <option value="h">Hadir</option>
-              <option value="a">Tiada</option>
-            </select>
-            <button class="btn sm" id="addAttBtn">Tambah</button>
+    <div class="seg-pane ${editTab === "hadir" ? "on" : ""}" data-pane="hadir">
+      <div class="stack">
+        <div class="row-input">
+          <input type="date" id="attDate" value="${todayISO()}" style="flex:1">
+          <div class="toggle2" id="attStatus" data-val="h">
+            <button type="button" data-v="h" class="on-h">Hadir</button>
+            <button type="button" data-v="a">Tiada</button>
           </div>
         </div>
-      </div>
-
-      <div class="full">
-        <div class="mini">
-          <h5>Keputusan Kuiz</h5>
-          <div id="quizList"></div>
-          <div class="editor-row" style="margin-top:10px">
-            <input type="date" id="qzDate" value="${new Date().toISOString().slice(0, 10)}">
-            <input type="text" id="qzTitle" placeholder="Tajuk kuiz">
-            <input type="number" id="qzScore" min="0" max="100" placeholder="Markah">
-            <button class="btn sm" id="addQzBtn">Tambah</button>
-          </div>
+        <div class="row-input">
+          <button type="button" class="btn" id="addAttBtn" style="flex:1">Tambah rekod</button>
+          <button type="button" class="btn soft" id="markAllPresentBtn" style="flex:1">✓ Seluruh kelas hadir</button>
         </div>
       </div>
+      <div id="attList" style="margin-top:12px"></div>
+    </div>
 
-      <div class="full">
-        <div class="mini">
-          <h5>Kosa Kata Dikuasai</h5>
-          <div id="vocabTags" class="words"></div>
-          <div class="editor-row" style="margin-top:10px">
-            <input type="text" id="vocabWord" placeholder="Perkataan baru">
-            <button class="btn sm" id="addVocabBtn">Tambah</button>
-          </div>
+    <div class="seg-pane ${editTab === "kuiz" ? "on" : ""}" data-pane="kuiz">
+      <div class="stack">
+        <input type="text" id="qzTitle" placeholder="Tajuk kuiz (cth: Kuiz Suku Kata)" autocomplete="off">
+        <div class="row-input">
+          <input type="date" id="qzDate" value="${todayISO()}" style="flex:1.4">
+          <input type="number" id="qzScore" min="0" max="100" inputmode="numeric" placeholder="Markah" style="flex:1">
         </div>
+        <button type="button" class="btn" id="addQzBtn">Tambah kuiz</button>
       </div>
+      <div id="quizList" style="margin-top:12px"></div>
+    </div>
+
+    <div class="seg-pane ${editTab === "kata" ? "on" : ""}" data-pane="kata">
+      <div class="row-input">
+        <input type="text" id="vocabWord" placeholder="Perkataan baru" autocomplete="off" autocapitalize="none" enterkeyhint="done" style="flex:1">
+        <button type="button" class="btn" id="addVocabBtn">Tambah</button>
+      </div>
+      <div id="vocabTags" class="tags" style="margin-top:14px"></div>
     </div>`;
 
   renderAttList();
   renderQuizList();
   renderVocabTags();
-  bindEditorEvents();
+}
+
+function sortedWithIndex(arr) {
+  return (arr || []).map((x, i) => ({ x, i })).sort((a, b) => (a.x.d < b.x.d ? 1 : -1));
 }
 
 function renderAttList() {
   const el = document.getElementById("attList");
-  const list = (editing.attendance || []).slice().sort((a, b) => (a.d < b.d ? 1 : -1));
-  const today = new Date().toISOString().slice(0, 10);
-  const hasToday = list.some(a => a.d === today);
-  el.innerHTML = `
-    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
-      <input type="date" id="attDate" value="${today}">
-      <select id="attStatus">
-        <option value="h">Hadir</option>
-        <option value="a">Tiada</option>
-      </select>
-      <button class="btn sm" id="addAttBtn">Tambah</button>
-      <button class="btn ghost sm" id="markAllPresentBtn" ${hasToday ? "disabled" : ""}>✓ Semua Hadir Hari Ini</button>
-    </div>
-    ${list.length ? list.map((a, i) => `
-    <div class="attrow">
-      <span>${esc(fmtDate(a.d))}</span>
-      <span style="display:flex;gap:8px;align-items:center">
-        <select class="att-sel" data-i="${i}">
-          <option value="h" ${a.s === "h" ? "selected" : ""}>Hadir</option>
-          <option value="a" ${a.s === "a" ? "selected" : ""}>Tiada</option>
-        </select>
-        <button class="btn danger sm att-del" data-i="${i}">Padam</button>
-      </span>
-    </div>`).join("") : '<span style="color:var(--muted);font-size:13px">Tiada sesi dicatat.</span>'}
-  `;
+  if (!el) return;
+  const list = sortedWithIndex(editing.attendance);
+  const st = attendanceStats(editing);
+  el.innerHTML = list.length ? `
+    <p class="muted" style="font-size:12.5px;font-weight:700;margin-bottom:4px">${st.hadir} hadir · ${st.absent} tiada · ${st.pct}%</p>
+    ${list.map(({ x, i }) => `
+      <div class="list-row">
+        <div class="grow"><b>${esc(fmtDate(x.d))}</b></div>
+        <div class="toggle2 att-toggle" data-i="${i}">
+          <button type="button" data-v="h" class="${x.s === "h" ? "on-h" : ""}">Hadir</button>
+          <button type="button" data-v="a" class="${x.s === "a" ? "on-a" : ""}">Tiada</button>
+        </div>
+        <button type="button" class="del-btn att-del" data-i="${i}" aria-label="Padam">${ICONS.trash}</button>
+      </div>`).join("")}`
+    : '<p class="empty" style="padding:20px 0">Tiada sesi dicatat lagi.</p>';
 }
 
 function renderQuizList() {
   const el = document.getElementById("quizList");
-  const list = (editing.quizzes || []).slice().sort((a, b) => (a.d < b.d ? 1 : -1));
-  el.innerHTML = list.length ? list.map((q, i) => `
-    <div class="attrow">
-      <span>${esc(fmtDate(q.d))}</span>
-      <span style="font-weight:600">${esc(q.t)}</span>
-      <span class="levelpill">${q.s} / 100</span>
-      <button class="btn danger sm qz-del" data-i="${i}">Padam</button>
-    </div>`).join("") : '<span style="color:var(--muted);font-size:13px">Tiada kuiz dicatat.</span>';
+  if (!el) return;
+  const list = sortedWithIndex(editing.quizzes);
+  el.innerHTML = list.length ? list.map(({ x, i }) => `
+    <div class="list-row">
+      <div class="grow"><b>${esc(x.t)}</b><small>${esc(fmtDate(x.d))}</small></div>
+      <span class="badge ${x.s >= 75 ? "good" : x.s >= 50 ? "warn" : "bad"}" style="font-size:13px">${x.s}/100</span>
+      <button type="button" class="del-btn qz-del" data-i="${i}" aria-label="Padam">${ICONS.trash}</button>
+    </div>`).join("") : '<p class="empty" style="padding:20px 0">Tiada kuiz dicatat lagi.</p>';
 }
 
 function renderVocabTags() {
   const el = document.getElementById("vocabTags");
+  if (!el) return;
   const list = editing.vocabulary || [];
   el.innerHTML = list.length ? list.map((w, i) => `
-    <span class="word">${esc(w)}<button class="vocab-del" data-i="${i}">×</button></span>`).join("") : '<span style="color:var(--muted);font-size:13px">Tiada perkataan dicatat.</span>';
+    <span class="word">${esc(w)}<button type="button" class="vocab-del" data-i="${i}" aria-label="Buang ${esc(w)}">×</button></span>`).join("")
+    : '<p class="muted" style="font-size:13px">Tiada perkataan dicatat.</p>';
 }
 
+function addAttendance() {
+  const d = document.getElementById("attDate").value;
+  const st = document.getElementById("attStatus").dataset.val || "h";
+  if (!d) return;
+  editing.attendance = editing.attendance || [];
+  const ex = editing.attendance.find(a => a.d === d);
+  if (ex) ex.s = st; else editing.attendance.push({ d, s: st });
+  renderAttList();
+}
+
+function markClassPresent() {
+  const d = document.getElementById("attDate").value;
+  const cls = (document.getElementById("inClass")?.value || editing.class || "").trim();
+  if (!d || !cls) return;
+  if (!confirm(`Tandakan semua murid kelas ${cls} hadir pada ${fmtDate(d)}?`)) return;
+  DATA.students.filter(s => s.class === cls).forEach(s => {
+    s.attendance = s.attendance || [];
+    if (!s.attendance.some(a => a.d === d)) s.attendance.push({ d, s: "h" });
+  });
+  editing.attendance = editing.attendance || [];
+  if (!editing.attendance.some(a => a.d === d)) editing.attendance.push({ d, s: "h" });
+  persist("Kehadiran dikemaskini untuk kelas " + cls);
+  renderAttList();
+  renderTable();
+}
+
+function addQuiz() {
+  const d = document.getElementById("qzDate").value;
+  const t = document.getElementById("qzTitle").value.trim();
+  const sc = parseInt(document.getElementById("qzScore").value, 10);
+  if (!d || !t || isNaN(sc)) { sbmToast("Isi tajuk, tarikh dan markah kuiz"); return; }
+  editing.quizzes = editing.quizzes || [];
+  editing.quizzes.push({ d, t, s: Math.max(0, Math.min(100, sc)) });
+  renderQuizList();
+  document.getElementById("qzTitle").value = "";
+  document.getElementById("qzScore").value = "";
+}
+
+function addVocab() {
+  const inp = document.getElementById("vocabWord");
+  const words = inp.value.split(/[,\n]/).map(w => w.trim().toLowerCase()).filter(Boolean);
+  if (!words.length) return;
+  editing.vocabulary = editing.vocabulary || [];
+  words.forEach(w => { if (!editing.vocabulary.includes(w)) editing.vocabulary.push(w); });
+  renderVocabTags();
+  inp.value = "";
+  inp.focus();
+}
+
+// Shrink phone photos (often 2–5 MB) to a small JPEG so they fit in Firestore.
+function compressImage(file, max = 360, quality = 0.82) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, max / Math.max(img.width, img.height));
+      const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+      const c = document.createElement("canvas");
+      c.width = w; c.height = h;
+      c.getContext("2d").drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(url);
+      resolve(c.toDataURL("image/jpeg", quality));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Gambar tidak dapat dibaca")); };
+    img.src = url;
+  });
+}
+
+// Wired ONCE (event delegation) — avoids duplicate listeners each time the sheet opens
 function bindEditorEvents() {
-  document.getElementById("addAttBtn").addEventListener("click", () => {
-    const d = document.getElementById("attDate").value;
-    const st = document.getElementById("attStatus").value;
-    if (!d) return;
-    editing.attendance = editing.attendance || [];
-    if (editing.attendance.some(a => a.d === d)) return;
-    editing.attendance.push({ d: d, s: st });
-    renderAttList();
-  });
-  document.getElementById("markAllPresentBtn").addEventListener("click", () => {
-    const d = document.getElementById("attDate").value;
-    if (!d) return;
-    editing.attendance = editing.attendance || [];
-    if (editing.attendance.some(a => a.d === d)) return;
-    const studentsInClass = DATA.students.filter(s => s.class === editing.class);
-    studentsInClass.forEach(s => {
-      s.attendance = s.attendance || [];
-      if (!s.attendance.some(a => a.d === d)) {
-        s.attendance.push({ d: d, s: "h" });
-      }
-    });
-    editing.attendance.push({ d: d, s: "h" });
-    saveData(DATA);
-    renderAttList();
-    renderTable();
-    sbmToast("Kehadiran dikemaskini untuk semua murid kelas " + editing.class);
-  });
-  document.addEventListener("click", e => {
-    if (e.target.classList.contains("att-del")) {
-      editing.attendance.splice(+e.target.dataset.i, 1);
+  const body = document.getElementById("editBody");
+  body.addEventListener("click", e => {
+    const t = e.target;
+    const tab = t.closest(".seg button[data-tab]");
+    if (tab) {
+      editTab = tab.dataset.tab;
+      body.querySelectorAll(".seg button").forEach(b => b.classList.toggle("on", b === tab));
+      body.querySelectorAll(".seg-pane").forEach(p => p.classList.toggle("on", p.dataset.pane === editTab));
+      return;
+    }
+    const stBtn = t.closest("#attStatus button");
+    if (stBtn) {
+      const box = stBtn.parentElement;
+      box.dataset.val = stBtn.dataset.v;
+      box.querySelectorAll("button").forEach(b => b.className = b === stBtn ? (b.dataset.v === "h" ? "on-h" : "on-a") : "");
+      return;
+    }
+    const tg = t.closest(".att-toggle button");
+    if (tg) {
+      const i = +tg.parentElement.dataset.i;
+      if (editing.attendance[i]) editing.attendance[i].s = tg.dataset.v;
       renderAttList();
+      return;
     }
-    if (e.target.classList.contains("att-sel")) {
-      const i = +e.target.dataset.i;
-      const sorted = (editing.attendance || []).slice().sort((a, b) => (a.d < b.d ? 1 : -1));
-      sorted[i].s = e.target.value;
-      renderAttList();
-    }
-    if (e.target.classList.contains("qz-del")) {
-      editing.quizzes.splice(+e.target.dataset.i, 1);
-      renderQuizList();
-    }
-    if (e.target.classList.contains("vocab-del")) {
-      editing.vocabulary.splice(+e.target.dataset.i, 1);
-      renderVocabTags();
+    const attDel = t.closest(".att-del");
+    if (attDel) { editing.attendance.splice(+attDel.dataset.i, 1); renderAttList(); return; }
+    const qzDel = t.closest(".qz-del");
+    if (qzDel) { editing.quizzes.splice(+qzDel.dataset.i, 1); renderQuizList(); return; }
+    const vDel = t.closest(".vocab-del");
+    if (vDel) { editing.vocabulary.splice(+vDel.dataset.i, 1); renderVocabTags(); return; }
+    if (t.closest("#addAttBtn")) return addAttendance();
+    if (t.closest("#markAllPresentBtn")) return markClassPresent();
+    if (t.closest("#addQzBtn")) return addQuiz();
+    if (t.closest("#addVocabBtn")) return addVocab();
+    if (t.closest("#rmPhoto")) {
+      pendingPhoto = null; editing.photo = ""; editing._photoRemoved = true;
+      captureProfileFields();
+      renderEditForm();
     }
   });
-  document.getElementById("addQzBtn").addEventListener("click", () => {
-    const d = document.getElementById("qzDate").value;
-    const t = document.getElementById("qzTitle").value.trim();
-    const sc = parseInt(document.getElementById("qzScore").value, 10);
-    if (!d || !t || isNaN(sc)) return;
-    editing.quizzes = editing.quizzes || [];
-    editing.quizzes.push({ d: d, t: t, s: Math.max(0, Math.min(100, sc)) });
-    renderQuizList();
-    document.getElementById("qzTitle").value = "";
-    document.getElementById("qzScore").value = "";
+  body.addEventListener("keydown", e => {
+    if (e.key === "Enter" && e.target.id === "vocabWord") { e.preventDefault(); addVocab(); }
   });
-  document.getElementById("addVocabBtn").addEventListener("click", () => {
-    const w = document.getElementById("vocabWord").value.trim().toLowerCase();
-    if (!w) return;
-    editing.vocabulary = editing.vocabulary || [];
-    if (!editing.vocabulary.includes(w)) editing.vocabulary.push(w);
-    renderVocabTags();
-    document.getElementById("vocabWord").value = "";
+  body.addEventListener("change", async e => {
+    if (e.target.id !== "inPhoto") return;
+    const f = e.target.files[0];
+    if (!f) return;
+    try {
+      pendingPhoto = await compressImage(f);
+      document.getElementById("photoPreview").innerHTML = avatar({ name: editing.name, photo: pendingPhoto }, "xl");
+    } catch (err) {
+      alert(err.message);
+    }
   });
 }
 
-/* ---------------- list table ---------------- */
+// Keep typed profile values when the form re-renders
+function captureProfileFields() {
+  const n = document.getElementById("inName");
+  if (!n) return;
+  editing.name = n.value;
+  editing.class = document.getElementById("inClass").value;
+  editing.gender = document.getElementById("inGender").value;
+  editing.currentLevel = parseInt(document.getElementById("inLevel").value, 10) || 1;
+}
+
+/* ---------------- student list (cards) ---------------- */
+
+function renderChips() {
+  const box = document.getElementById("classChips");
+  if (!box) return;
+  const classes = classesOf(DATA);
+  const count = c => DATA.students.filter(s => s.class === c).length;
+  box.innerHTML = classes.length ? [
+    `<button class="chip ${!filterClass ? "on" : ""}" data-cls="">Semua<span class="n">${DATA.students.length}</span></button>`,
+    ...classes.map(c => `<button class="chip ${filterClass === c ? "on" : ""}" data-cls="${esc(c)}">${esc(c)}<span class="n">${count(c)}</span></button>`)
+  ].join("") : "";
+}
+
+function renderHeroAdmin() {
+  const el = document.getElementById("adminHero");
+  if (!el) return;
+  const u = getCurrentUser();
+  const first = u ? ((u.displayName || "").trim().split(/\s+/)[0] || "Cikgu") : "Cikgu";
+  const total = DATA.students.length;
+  const today = todayISO();
+  const markedToday = DATA.students.filter(s => (s.attendance || []).some(a => a.d === today)).length;
+  const ready = DATA.students.filter(s => checkLevelUp(DATA, s)).length;
+  const linus = DATA.students.filter(isLinus).length;
+  el.innerHTML = `
+    <div class="eyebrow">${greeting()}, ${esc(first)}</div>
+    <h1>Murid anda</h1>
+    <div class="chips-glass">
+      <span>👩‍🎓 ${total} murid</span>
+      <span>🗓️ ${markedToday}/${total} direkod hari ini</span>
+      ${ready ? `<span>🎓 ${ready} sedia naik tahap</span>` : ""}
+      ${linus ? `<span>⚠️ ${linus} perlu intervensi</span>` : ""}
+    </div>`;
+}
 
 function renderTable() {
+  renderChips();
+  renderHeroAdmin();
   const wrap = document.getElementById("tableWrap");
   let list = DATA.students.filter(s => !filterClass || s.class === filterClass);
   const q = filterText.trim().toLowerCase();
   if (q) list = list.filter(s => s.name.toLowerCase().includes(q) || s.class.toLowerCase().includes(q));
-  if (sortBy === "name") list.sort((a,b) => a.name.localeCompare(b.name));
-  else if (sortBy === "level") list.sort((a,b) => (b.currentLevel||1) - (a.currentLevel||1));
-  else if (sortBy === "att") list.sort((a,b) => attendanceStats(b).pct - attendanceStats(a).pct);
+  if (sortBy === "name") list.sort((a, b) => a.name.localeCompare(b.name));
+  else if (sortBy === "level") list.sort((a, b) => (b.currentLevel || 1) - (a.currentLevel || 1));
+  else if (sortBy === "att") list.sort((a, b) => attendanceStats(b).pct - attendanceStats(a).pct);
+  wrap.classList.toggle("select-mode", selectMode);
+  updateSelectBar();
   if (!list.length) {
-    wrap.innerHTML = `<div class="card empty"><div class="big">📚</div>Tiada murid lagi. Klik "Tambah Murid" untuk bermula.</div>`;
-    document.getElementById("bulkPromoteBtn").disabled = true;
+    wrap.innerHTML = DATA.students.length
+      ? `<div class="card empty"><div class="big">🔍</div>Tiada murid sepadan dengan carian.</div>`
+      : `<div class="card empty"><div class="big">🌱</div>Belum ada murid.<br>Tekan butang <b>+</b> untuk menambah, atau import senarai APDM di <b>Tetapan</b>.</div>`;
     return;
   }
-  wrap.innerHTML = `
-    <div class="card" style="padding:0;overflow-x:auto">
-      <table class="tbl">
-        <thead>
-          <tr><th class="no-print"><input type="checkbox" id="selectAll"></th><th>Murid</th><th>Kelas</th><th>Tahap</th><th>Kehadiran</th><th class="no-print"></th></tr>
-        </thead>
-        <tbody>
-          ${list.map(s => {
-            const att = attendanceStats(s);
-            const lv = levelIndex(DATA, s);
-            const shareUrl = `${location.origin}${location.pathname.replace("admin.html", "")}parent.html?student=${s.id}`;
-            const waText = encodeURIComponent(
-              `📚 *Laporan Kemajuan ${s.name}*\n` +
-              `Kelas: ${s.class}\n` +
-              `Tahap: ${DATA.meta.levels[lv].name}\n` +
-              `Kehadiran: ${att.pct}%\n` +
-              `Purata Kuiz: ${quizAvg(s)}/100\n\n` +
-              `Lihat penuh: ${shareUrl}\n` +
-              `_Program Bijak Membaca - ${DATA.meta.schoolName}_`
-            );
-            const checked = selectedIds.has(s.id) ? "checked" : "";
-            const linusBadge = isLinus(s) ? `<span class="levelpill" style="background:#fee2e2;color:#b91c1c;margin-left:6px;font-size:10px">⚠️ Intervensi</span>` : "";
-            return `
-            <tr>
-              <td class="no-print"><input type="checkbox" class="rowCheck" data-id="${esc(s.id)}" ${checked}></td>
-              <td style="font-weight:700">${esc(s.name)}${linusBadge}</td>
-              <td>${esc(s.class)}</td>
-              <td><span class="levelpill">${esc(DATA.meta.levels[lv].short)} · ${esc(DATA.meta.levels[lv].name)}</span>${linusBadge ? "" : ""}</td>
-              <td>${att.pct}% <span class="smallmeta" style="display:inline">(${att.hadir}/${att.total})</span></td>
-              <td class="actions no-print">
-                <button class="btn sm ghost editBtn" data-id="${esc(s.id)}">Edit</button>
-                <button class="btn sm ghost shareBtn" data-url="${esc(shareUrl)}" title="Salin pautan">🔗</button>
-                <button class="btn sm ghost qrBtn" data-url="${esc(shareUrl)}" data-name="${esc(s.name)}" title="QR Code">QR</button>
-                <button class="btn sm ghost waBtn" data-url="https://wa.me/?text=${waText}" title="WhatsApp">📱</button>
-              </td>
-            </tr>`;
-          }).join("")}
-        </tbody>
-      </table>
-    </div>`;
-  const bulkBtn = document.getElementById("bulkPromoteBtn");
-  if (bulkBtn) bulkBtn.disabled = selectedIds.size === 0;
-  wrap.querySelectorAll(".editBtn").forEach(b => b.addEventListener("click", () => openEditor(b.dataset.id)));
-  wrap.querySelectorAll(".shareBtn").forEach(b => b.addEventListener("click", () => {
-    const url = b.dataset.url;
-    navigator.clipboard.writeText(url).then(() => {
-      const original = b.textContent;
-      b.textContent = "✓";
-      setTimeout(() => b.textContent = original, 1500);
-    }).catch(() => {
-      prompt("Salin pautan ini:", url);
-    });
-  }));
-  wrap.querySelectorAll(".waBtn").forEach(b => b.addEventListener("click", () => {
-    window.open(b.dataset.url, "_blank");
-  }));
-  wrap.querySelectorAll(".qrBtn").forEach(b => b.addEventListener("click", () => openQrModal(b.dataset.url, b.dataset.name)));
-  const selectAll = wrap.querySelector("#selectAll");
-  if (selectAll) selectAll.addEventListener("change", e => {
-    if (e.target.checked) list.forEach(s => selectedIds.add(s.id));
-    else list.forEach(s => selectedIds.delete(s.id));
-    renderTable();
-  });
-  wrap.querySelectorAll(".rowCheck").forEach(cb => cb.addEventListener("change", e => {
-    if (e.target.checked) selectedIds.add(e.target.dataset.id);
-    else selectedIds.delete(e.target.dataset.id);
-    document.getElementById("bulkPromoteBtn").disabled = selectedIds.size === 0;
-  }));
+  wrap.innerHTML = `<div class="students">${list.map(s => {
+    const att = attendanceStats(s);
+    const lv = levelIndex(DATA, s);
+    const sel = selectedIds.has(s.id);
+    const lu = checkLevelUp(DATA, s);
+    return `
+      <div class="scard ${sel ? "selected" : ""}" data-id="${esc(s.id)}" role="button" tabindex="0">
+        <input type="checkbox" class="check rowCheck" data-id="${esc(s.id)}" ${sel ? "checked" : ""} aria-label="Pilih ${esc(s.name)}">
+        ${avatar(s)}
+        <div class="body">
+          <div class="nm">${esc(s.name)}</div>
+          <div class="sub">
+            ${levelPill(DATA, lv)}
+            ${!filterClass ? `<span class="muted" style="font-size:12px;font-weight:700">${esc(s.class)}</span>` : ""}
+            ${isLinus(s) ? `<span class="badge bad">⚠️ Intervensi</span>` : ""}
+            ${lu ? `<span class="badge good" title="${esc(lu.reason)}">🎓 Sedia naik</span>` : ""}
+          </div>
+          <div class="meta">
+            <span>Hadir ${att.pct}%</span>
+            <div class="meter ${meterClass(att.pct)}"><i style="width:${att.pct}%"></i></div>
+            <span>${att.hadir}/${att.total}</span>
+          </div>
+        </div>
+        <button class="share-btn shareBtn" data-id="${esc(s.id)}" aria-label="Kongsi laporan ${esc(s.name)}">${ICONS.share}</button>
+      </div>`;
+  }).join("")}</div>`;
 }
 
-function openQrModal(url, name) {
-  const modal = document.getElementById("qrModalBg");
+function updateSelectBar() {
+  const bar = document.getElementById("selectBar");
+  if (!bar) return;
+  bar.classList.toggle("hidden", !selectMode);
+  document.getElementById("selCount").textContent = selectedIds.size + " dipilih";
+  const bulkBtn = document.getElementById("bulkPromoteBtn");
+  if (bulkBtn) bulkBtn.disabled = selectedIds.size === 0;
+  document.getElementById("selectModeBtn")?.classList.toggle("on", selectMode);
+}
+
+function toggleSelectMode(on) {
+  selectMode = typeof on === "boolean" ? on : !selectMode;
+  if (!selectMode) selectedIds.clear();
+  document.getElementById("addStudentBtn").classList.toggle("hidden", selectMode);
+  renderTable();
+}
+
+function openQrModal(s) {
+  const url = shareUrlFor(s);
+  const text = shareTextFor(s);
   const qrEl = document.getElementById("qrCode");
-  const urlEl = document.getElementById("qrUrl");
   qrEl.innerHTML = "";
   // eslint-disable-next-line no-undef
-  if (typeof QRCode !== 'undefined') {
-    new QRCode(qrEl, { text: url, width: 180, height: 180, correctLevel: QRCode.CorrectLevel.M });
+  if (typeof QRCode !== "undefined") {
+    new QRCode(qrEl, { text: url, width: 190, height: 190, correctLevel: QRCode.CorrectLevel.M });
   } else {
     qrEl.textContent = url;
   }
-  urlEl.textContent = url + (name ? " — " + name : "");
-  const waBtn = document.getElementById("qrWaBtn");
-  const copyBtn = document.getElementById("qrCopyBtn");
-  if (waBtn) waBtn.onclick = () => window.open("https://wa.me/?text=" + encodeURIComponent("Laporan " + (name || "murid") + ": " + url), "_blank");
-  if (copyBtn) copyBtn.onclick = () => navigator.clipboard.writeText(url).then(() => sbmToast("Pautan disalin")).catch(() => prompt("Salin pautan:", url));
-  modal.classList.add("open");
+  document.getElementById("qrName").innerHTML = `${avatar(s)}<div style="text-align:left;min-width:0"><b style="display:block">${esc(s.name)}</b><small class="muted" style="font-weight:600">${esc(s.class)}</small></div>`;
+  document.getElementById("qrUrl").textContent = url;
+  document.getElementById("qrWaBtn").onclick = () => window.open("https://wa.me/?text=" + encodeURIComponent(text), "_blank");
+  document.getElementById("qrCopyBtn").onclick = () => navigator.clipboard.writeText(url).then(() => sbmToast("Pautan disalin ✓")).catch(() => prompt("Salin pautan:", url));
+  const nat = document.getElementById("qrShareBtn");
+  nat.classList.toggle("hidden", !navigator.share);
+  nat.onclick = () => navigator.share({ title: "Laporan " + s.name, text: text.replace(/\*|_/g, ""), url }).catch(() => {});
+  document.getElementById("qrModalBg").classList.add("open");
 }
 
-/* ---------------- editor modal ---------------- */
+/* ---------------- quick attendance (whole class) ---------------- */
+
+let qaClass = "";
+let qaState = {};
+
+function openAttendance() {
+  const classes = classesOf(DATA);
+  if (!classes.length) { sbmToast("Tambah murid dahulu"); return; }
+  qaClass = filterClass || qaClass || classes[0];
+  document.getElementById("qaDate").value = todayISO();
+  loadQaState();
+  renderAttendance();
+  document.getElementById("attendModalBg").classList.add("open");
+}
+
+function loadQaState() {
+  const d = document.getElementById("qaDate").value;
+  qaState = {};
+  DATA.students.filter(s => s.class === qaClass).forEach(s => {
+    const rec = (s.attendance || []).find(a => a.d === d);
+    qaState[s.id] = rec ? rec.s : "";
+  });
+}
+
+function renderAttendance() {
+  const classes = classesOf(DATA);
+  document.getElementById("qaChips").innerHTML = classes.map(c =>
+    `<button class="chip ${c === qaClass ? "on" : ""}" data-cls="${esc(c)}">${esc(c)}</button>`).join("");
+  const list = DATA.students.filter(s => s.class === qaClass).sort((a, b) => a.name.localeCompare(b.name));
+  const vals = Object.values(qaState);
+  const h = vals.filter(v => v === "h").length, a = vals.filter(v => v === "a").length;
+  document.getElementById("qaSummary").textContent = `${h} hadir · ${a} tiada · ${list.length - h - a} belum`;
+  document.getElementById("qaList").innerHTML = list.map(s => `
+    <div class="list-row">
+      ${avatar(s)}
+      <div class="grow"><b style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(s.name)}</b></div>
+      <div class="toggle2 qa-toggle" data-id="${esc(s.id)}">
+        <button type="button" data-v="h" class="${qaState[s.id] === "h" ? "on-h" : ""}">Hadir</button>
+        <button type="button" data-v="a" class="${qaState[s.id] === "a" ? "on-a" : ""}">Tiada</button>
+      </div>
+    </div>`).join("");
+}
+
+async function saveAttendance() {
+  const d = document.getElementById("qaDate").value;
+  if (!d) return;
+  let n = 0;
+  DATA.students.forEach(s => {
+    const v = qaState[s.id];
+    if (!v) return;
+    s.attendance = s.attendance || [];
+    const ex = s.attendance.find(a => a.d === d);
+    if (ex) ex.s = v; else s.attendance.push({ d, s: v });
+    n++;
+  });
+  if (!n) { sbmToast("Tiada rekod untuk disimpan"); return; }
+  document.getElementById("attendModalBg").classList.remove("open");
+  renderTable();
+  await persist(`Kehadiran ${n} murid disimpan ✓`);
+}
+
+function wireAttendance() {
+  document.getElementById("qaChips").addEventListener("click", e => {
+    const c = e.target.closest(".chip"); if (!c) return;
+    qaClass = c.dataset.cls; loadQaState(); renderAttendance();
+  });
+  document.getElementById("qaDate").addEventListener("change", () => { loadQaState(); renderAttendance(); });
+  document.getElementById("qaList").addEventListener("click", e => {
+    const b = e.target.closest(".qa-toggle button"); if (!b) return;
+    const id = b.parentElement.dataset.id;
+    qaState[id] = qaState[id] === b.dataset.v ? "" : b.dataset.v;
+    renderAttendance();
+  });
+  document.getElementById("qaAllBtn").addEventListener("click", () => {
+    Object.keys(qaState).forEach(k => qaState[k] = "h"); renderAttendance();
+  });
+  document.getElementById("qaSaveBtn").addEventListener("click", saveAttendance);
+}
+
+/* ---------------- editor open / save ---------------- */
 
 function openEditor(id) {
   editing = DATA.students.find(s => s.id === id);
   if (!editing) return;
-  document.getElementById("editTitle").textContent = "Edit — " + editing.name;
+  editing = JSON.parse(JSON.stringify(editing)); // edit a copy; commit on Simpan
+  pendingPhoto = null;
+  editTab = "profil";
+  document.getElementById("editTitle").textContent = editing.name;
   renderEditForm();
   document.getElementById("editModalBg").classList.add("open");
 }
@@ -351,68 +554,50 @@ function newStudent() {
     vocabulary: [],
     teacherId: teacherId
   };
-  document.getElementById("editTitle").textContent = "Tambah Murid Baru";
+  pendingPhoto = null;
+  editTab = "profil";
+  document.getElementById("editTitle").textContent = "Murid baru";
   renderEditForm();
   document.getElementById("editModalBg").classList.add("open");
+  setTimeout(() => document.getElementById("inName")?.focus(), 350);
 }
 
 function saveEditing() {
-  const name = document.getElementById("inName").value.trim();
-  const cls = document.getElementById("inClass").value.trim();
-  const gender = document.getElementById("inGender").value;
-  const level = parseInt(document.getElementById("inLevel").value, 10);
-  if (!name || !cls) return;
-  editing.name = name;
-  editing.class = cls;
-  editing.gender = gender;
-  editing.currentLevel = level;
-  
-  // Handle photo upload
-  const photoInput = document.getElementById("inPhoto");
-  if (photoInput && photoInput.files[0]) {
-    const file = photoInput.files[0];
-    if (file.size > 500 * 1024) {
-      alert("Gambar terlalu besar. Maksimum 500KB.");
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = e => {
-      editing.photo = e.target.result;
-      doSave();
-    };
-    reader.readAsDataURL(file);
+  captureProfileFields();
+  editing.name = editing.name.trim();
+  editing.class = editing.class.trim();
+  if (!editing.name || !editing.class) {
+    editTab = "profil";
+    renderEditForm();
+    sbmToast("Sila isi nama dan kelas murid");
     return;
   }
-  
-  doSave();
-  
-  function doSave() {
-    const existing = DATA.students.find(s => s.id === editing.id);
-    if (existing) {
-      Object.assign(existing, editing);
-    } else {
-      DATA.students.push(editing);
-    }
-    saveData(DATA);
-    closeEditor();
-    fillClassFilter();
-    renderTable();
-  }
+  if (pendingPhoto) editing.photo = pendingPhoto;
+  delete editing._photoRemoved;
+  const existing = DATA.students.find(s => s.id === editing.id);
+  if (existing) Object.assign(existing, editing);
+  else DATA.students.push(editing);
+  const name = editing.name;
+  closeEditor();
+  fillClassFilter();
+  renderTable();
+  persist((existing ? "Disimpan: " : "Murid ditambah: ") + name + " ✓");
 }
 
 function closeEditor() {
   document.getElementById("editModalBg").classList.remove("open");
   editing = null;
+  pendingPhoto = null;
 }
 
 function deleteEditing() {
   if (!editing) return;
-  if (!confirm("Pastikan anda mahu memadam murid ini?")) return;
+  if (!confirm(`Padam ${editing.name}? Semua rekod murid ini akan hilang.`)) return;
   DATA.students = DATA.students.filter(s => s.id !== editing.id);
-  saveData(DATA);
   closeEditor();
   fillClassFilter();
   renderTable();
+  persist("Murid dipadam");
 }
 
 /* ---------------- settings ---------------- */
@@ -421,12 +606,12 @@ function renderSettings() {
   document.getElementById("setSchool").value = DATA.meta.schoolName;
   document.getElementById("setProgram").value = DATA.meta.programName;
   document.getElementById("setYear").value = DATA.meta.year;
-  const box = document.getElementById("levelInputs");
-  box.innerHTML = DATA.meta.levels.map((l, i) => `
-    <div class="editor-row" style="margin-bottom:8px;flex-wrap:wrap">
-      <span style="min-width:28px;font-weight:700;color:var(--muted)">L${i+1}</span>
-      <input type="text" value="${esc(l.name)}" data-level="${i}" placeholder="Nama tahap" style="flex:2;min-width:140px">
-      <input type="url" value="${esc(l.material||'')}" data-material="${i}" placeholder="Link bahan (https://)" style="flex:2;min-width:140px">
+  const total = DATA.meta.levels.length;
+  document.getElementById("levelInputs").innerHTML = DATA.meta.levels.map((l, i) => `
+    <div class="level-edit">
+      <div class="lh"><span class="lvpill" style="--h:${levelHue(i, total)}"><i></i>L${i + 1}</span> Tahap ${i + 1}</div>
+      <input type="text" value="${esc(l.name)}" data-level="${i}" placeholder="Nama tahap">
+      <input type="url" value="${esc(l.material || "")}" data-material="${i}" placeholder="Pautan bahan (https://…)" inputmode="url" autocapitalize="none">
     </div>`).join("");
 }
 
@@ -436,9 +621,10 @@ function saveSettings() {
   DATA.meta.schoolName = document.getElementById("setSchool").value.trim() || DATA.meta.schoolName;
   DATA.meta.programName = document.getElementById("setProgram").value.trim() || DATA.meta.programName;
   DATA.meta.year = document.getElementById("setYear").value.trim() || DATA.meta.year;
-  saveData(DATA);
   document.getElementById("programName").textContent = DATA.meta.programName;
   renderTable();
+  renderOnboarding();
+  persist("Tetapan disimpan ✓");
 }
 
 function DOMLevelNames() {
@@ -454,9 +640,7 @@ function DOMLevelNames() {
 }
 
 function syncLevelNames() {
-  DATA.meta.levels.forEach((l, i) => {
-    l.short = "L" + (i + 1);
-  });
+  DATA.meta.levels.forEach((l, i) => { l.short = "L" + (i + 1); });
 }
 
 function fillClassFilter() {
@@ -465,91 +649,122 @@ function fillClassFilter() {
   sel.innerHTML = `<option value="">Semua Kelas</option>`;
   classesOf(DATA).forEach(c => {
     const o = document.createElement("option");
-    o.value = c;
-    o.textContent = c;
+    o.value = c; o.textContent = c;
     sel.appendChild(o);
   });
   sel.value = cur;
+  if (sel.value !== cur) filterClass = "";
+  renderChips();
 }
 
-/* ---------------- rest ---------------- */
+/* ---------------- wiring ---------------- */
 
 function wireAdmin() {
-  document.getElementById("classFilter").addEventListener("change", e => {
-    filterClass = e.target.value;
+  if (wired) return;
+  wired = true;
+  const $ = id => document.getElementById(id);
+  const on = (id, ev, fn) => { const el = $(id); if (el) el.addEventListener(ev, fn); };
+
+  on("classFilter", "change", e => { filterClass = e.target.value; renderTable(); });
+  on("classChips", "click", e => {
+    const chip = e.target.closest(".chip"); if (!chip) return;
+    filterClass = chip.dataset.cls;
+    $("classFilter").value = filterClass;
     renderTable();
   });
-  const searchEl = document.getElementById("adminSearch");
   let searchTimer;
-  if (searchEl) searchEl.addEventListener("input", e => {
+  on("adminSearch", "input", e => {
     clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => { filterText = e.target.value; renderTable(); }, 250);
+    searchTimer = setTimeout(() => { filterText = e.target.value; renderTable(); }, 200);
   });
-  const sortEl = document.getElementById("sortBy");
-  if (sortEl) sortEl.addEventListener("change", e => { sortBy = e.target.value; renderTable(); });
-  document.getElementById("bulkPromoteBtn")?.addEventListener("click", bulkPromote);
-  document.getElementById("promoteClassBtn")?.addEventListener("click", promoteClass);
-  document.getElementById("archiveYearBtn")?.addEventListener("click", archiveYear);
-  document.getElementById("posterBtn")?.addEventListener("click", posterKelasA3);
-  document.getElementById("transferBtn")?.addEventListener("click", openTransferModal);
-  document.getElementById("confirmTransferBtn")?.addEventListener("click", confirmTransfer);
-  document.getElementById("importApdmBtn")?.addEventListener("click", () => document.getElementById("importApdmFile")?.click());
-  document.getElementById("importApdmFile")?.addEventListener("change", async e => {
+  on("sortBy", "change", e => { sortBy = e.target.value; renderTable(); });
+  on("selectModeBtn", "click", () => toggleSelectMode());
+  on("selCancelBtn", "click", () => toggleSelectMode(false));
+
+  on("tableWrap", "click", e => {
+    const share = e.target.closest(".shareBtn");
+    const card = e.target.closest(".scard");
+    if (!card) return;
+    const s = DATA.students.find(x => x.id === card.dataset.id);
+    if (!s) return;
+    if (share) { e.stopPropagation(); openQrModal(s); return; }
+    if (selectMode) {
+      if (selectedIds.has(s.id)) selectedIds.delete(s.id); else selectedIds.add(s.id);
+      card.classList.toggle("selected", selectedIds.has(s.id));
+      const cb = card.querySelector(".rowCheck"); if (cb) cb.checked = selectedIds.has(s.id);
+      updateSelectBar();
+      return;
+    }
+    openEditor(s.id);
+  });
+
+  // tab bar
+  document.querySelectorAll(".tabbar [data-view]").forEach(t => t.addEventListener("click", e => { e.preventDefault(); setView(t.dataset.view); }));
+  on("tabHadir", "click", e => { e.preventDefault(); openAttendance(); });
+  on("quickAttBtn", "click", openAttendance);
+
+  on("bulkPromoteBtn", "click", bulkPromote);
+  on("promoteClassBtn", "click", promoteClass);
+  on("archiveYearBtn", "click", archiveYear);
+  on("posterBtn", "click", posterKelasA3);
+  on("transferBtn", "click", openTransferModal);
+  on("confirmTransferBtn", "click", confirmTransfer);
+  on("importApdmBtn", "click", () => $("importApdmFile")?.click());
+  on("importApdmFile", "change", async e => {
     const f = e.target.files[0]; if (!f) return;
     await importApdmFile(f);
     e.target.value = "";
   });
-  document.getElementById("exportKpmBtn")?.addEventListener("click", exportKpm);
-  document.getElementById("exportPbdBtn")?.addEventListener("click", exportPbd);
-  document.getElementById("addStudentBtn").addEventListener("click", newStudent);
-  document.getElementById("saveStudentBtn").addEventListener("click", saveEditing);
-  document.getElementById("deleteStudentBtn").addEventListener("click", deleteEditing);
+  on("exportKpmBtn", "click", exportKpm);
+  on("exportPbdBtn", "click", exportPbd);
+  on("addStudentBtn", "click", newStudent);
+  on("saveStudentBtn", "click", saveEditing);
+  on("deleteStudentBtn", "click", deleteEditing);
+  bindEditorEvents();
+  wireAttendance();
+
   document.querySelectorAll("[data-close]").forEach(b => b.addEventListener("click", () => {
     const target = b.getAttribute("data-close");
-    if (target === "qr") document.getElementById("qrModalBg").classList.remove("open");
-    else if (target === "transfer") document.getElementById("transferModalBg").classList.remove("open");
-    else { document.getElementById("editModalBg").classList.remove("open"); editing = null; }
+    if (target === "qr") $("qrModalBg").classList.remove("open");
+    else if (target === "transfer") $("transferModalBg").classList.remove("open");
+    else if (target === "attend") $("attendModalBg").classList.remove("open");
+    else closeEditor();
   }));
-  document.getElementById("transferModalBg")?.addEventListener("click", e => { if (e.target===e.currentTarget) e.currentTarget.classList.remove("open"); });
-  document.getElementById("editModalBg").addEventListener("click", e => {
-    if (e.target === e.currentTarget) {
-      document.getElementById("editModalBg").classList.remove("open");
-      editing = null;
-    }
-  });
-  document.getElementById("qrModalBg").addEventListener("click", e => {
-    if (e.target === e.currentTarget) e.currentTarget.classList.remove("open");
+  ["qrModalBg", "transferModalBg", "attendModalBg"].forEach(id => on(id, "click", e => { if (e.target === e.currentTarget) e.currentTarget.classList.remove("open"); }));
+  on("editModalBg", "click", e => { if (e.target === e.currentTarget) closeEditor(); });
+  document.addEventListener("keydown", e => {
+    if (e.key !== "Escape") return;
+    document.querySelectorAll(".modal-bg.open").forEach(m => m.classList.remove("open"));
+    editing = null;
   });
 
-  document.getElementById("exportBtn").addEventListener("click", () => {
+  on("exportBtn", "click", () => {
     saveData(DATA);
     downloadJSON(DATA, "students.json");
   });
-  document.getElementById("importBtn").addEventListener("click", () => document.getElementById("importFile").click());
-  document.getElementById("importFile").addEventListener("change", async e => {
+  on("importBtn", "click", () => $("importFile").click());
+  on("importFile", "change", async e => {
     const f = e.target.files[0];
     if (!f) return;
     try {
       const text = await f.text();
       const data = JSON.parse(text);
       if (!data || !Array.isArray(data.students)) throw new Error("format");
+      if (!confirm(`Gantikan data semasa dengan ${data.students.length} murid dari fail ini?`)) { e.target.value = ""; return; }
       const teacherId = getCurrentUser ? getCurrentUser().uid : null;
-      if (teacherId) {
-        data.students = data.students.map(s => ({ ...s, teacherId }));
-      }
+      if (teacherId) data.students = data.students.map(s => ({ ...s, teacherId }));
       DATA = data;
-      saveData(DATA);
       fillClassFilter();
       renderSettings();
       renderTable();
-      alert("Data berjaya dimuat naik.");
+      await persist("Data berjaya dimuat naik ✓");
     } catch (err) {
       alert("Fail JSON tidak sah. Pastikan ia mengandungi data murid yang betul.");
     }
     e.target.value = "";
   });
-  document.getElementById("importCsvBtn").addEventListener("click", () => document.getElementById("importCsvFile").click());
-  document.getElementById("importCsvFile").addEventListener("change", async e => {
+  on("importCsvBtn", "click", () => $("importCsvFile").click());
+  on("importCsvFile", "change", async e => {
     const f = e.target.files[0];
     if (!f) return;
     try {
@@ -560,7 +775,7 @@ function wireAdmin() {
         return;
       }
       const teacherId = getCurrentUser ? getCurrentUser().uid : null;
-      const imported = result.data.map((row, i) => ({
+      const imported = result.data.map(row => ({
         id: uid("s"),
         name: (row.nama || row.name || "").trim(),
         class: (row.kelas || row.class || "").trim(),
@@ -576,36 +791,36 @@ function wireAdmin() {
         return;
       }
       DATA.students.push(...imported);
-      saveData(DATA);
       fillClassFilter();
       renderTable();
-      alert(`${imported.length} murid berjaya diimport dari CSV.`);
+      await persist(`${imported.length} murid diimport dari CSV ✓`);
     } catch (err) {
       alert("Gagal import CSV: " + err.message);
     }
     e.target.value = "";
   });
-  document.getElementById("previewBtn").addEventListener("click", () => {
+  on("previewBtn", "click", () => {
     saveData(DATA);
-    window.open("index.html", "_blank");
+    window.location.href = "index.html";
   });
-  document.getElementById("saveSettingsBtn").addEventListener("click", saveSettings);
-  document.getElementById("resetBtn").addEventListener("click", () => {
+  on("saveSettingsBtn", "click", saveSettings);
+  on("resetBtn", "click", () => {
     if (!confirm("Ini akan mengosongkan SEMUA data murid anda. Teruskan?")) return;
+    if (!confirm("Pasti? Tindakan ini tidak boleh dibatalkan.")) return;
     const d = defaultData();
     DATA.meta.schoolName = d.meta.schoolName;
     DATA.meta.programName = d.meta.programName;
     DATA.meta.year = d.meta.year;
     DATA.meta.levels = d.meta.levels.map(l => ({ ...l }));
     DATA.students = [];
-    saveData(DATA);
     fillClassFilter();
     renderSettings();
     renderTable();
-    alert("Data telah dikosongkan.");
+    persist("Data telah dikosongkan");
   });
-  document.getElementById("printReportBtn").addEventListener("click", () => {
+  on("printReportBtn", "click", () => {
     if (!editing) return;
+    captureProfileFields();
     printStudentReport(editing);
   });
 }
@@ -925,60 +1140,69 @@ async function confirmTransfer() {
 }
 
 function renderOnboarding() {
-  const card=document.getElementById("onboardingCard");
+  const card = document.getElementById("onboardingCard");
   if (!card || !DATA) return;
-  const doneImport = DATA.students.length>0;
-  const doneLevel = DATA.meta.levels.some(l=>l.material);
-  const doneShare = DATA.students.some(s=>s.attendance && s.attendance.length>0);
+  const doneImport = DATA.students.length > 0;
+  const doneLevel = DATA.meta.levels.some(l => l.material);
+  const doneShare = DATA.students.some(s => s.attendance && s.attendance.length > 0);
   const allDone = doneImport && doneLevel && doneShare;
-  if (allDone && localStorage.getItem("sbm_onboard_done")==="1") { card.style.display="none"; return; }
-  card.style.display="block";
-  card.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
-    <div>
-      <h3 style="font-size:15px;margin-bottom:4px">👋 Selamat datang, Cikgu!</h3>
-      <p style="font-size:13px;color:var(--muted)">3 langkah mula:</p>
-      <ol style="font-size:13px;margin:8px 0 0 18px;line-height:1.7">
-        <li>${doneImport ? "✅" : "⬜"} Import murid (APDM/CSV) — ${DATA.students.length} murid</li>
-        <li>${doneLevel ? "✅" : "⬜"} Isi link bahan per tahap di Tetapan Program</li>
-        <li>${doneShare ? "✅" : "⬜"} Kongsi QR/WhatsApp ke ibu bapa</li>
-      </ol>
+  let dismissed = false;
+  try { dismissed = localStorage.getItem("sbm_onboard_done") === "1"; } catch (e) {}
+  if (allDone || dismissed) { card.style.display = "none"; return; }
+  const n = [doneImport, doneLevel, doneShare].filter(Boolean).length;
+  const step = (done, txt) => `<div class="list-row" style="padding:9px 0"><span style="font-size:18px">${done ? "✅" : "○"}</span><div class="grow" style="${done ? "text-decoration:line-through;opacity:.6" : ""}">${txt}</div></div>`;
+  card.style.display = "block";
+  card.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+      <div>
+        <div class="eyebrow">Mula di sini · ${n}/3</div>
+        <h3 class="display" style="font-size:20px;margin-top:4px">👋 Selamat datang, Cikgu!</h3>
+      </div>
+      <button class="x" id="onboardClose" aria-label="Tutup">×</button>
     </div>
-    <div style="display:flex;gap:8px;align-items:center">
-      <button class="btn ghost sm" id="onboardClose">Tutup</button>
-      ${!allDone ? `<span style="font-size:12px;color:var(--muted)">${[doneImport,doneLevel,doneShare].filter(Boolean).length}/3 siap</span>` : `<span style="font-size:12px;color:var(--good);font-weight:700">Sedia!</span>`}
-    </div>
-  </div>`;
-  card.querySelector("#onboardClose")?.addEventListener("click", ()=>{ localStorage.setItem("sbm_onboard_done","1"); card.style.display="none"; });
+    <div class="meter" style="margin:12px 0 6px"><i style="width:${Math.round(n / 3 * 100)}%"></i></div>
+    ${step(doneImport, `Tambah atau import murid <small>${DATA.students.length} murid setakat ini</small>`)}
+    ${step(doneLevel, `Isi pautan bahan setiap tahap <small>Di Tetapan → Tahap Bacaan</small>`)}
+    ${step(doneShare, `Rekod kehadiran pertama <small>Tekan "Kehadiran" di bawah</small>`)}`;
+  card.querySelector("#onboardClose")?.addEventListener("click", () => {
+    try { localStorage.setItem("sbm_onboard_done", "1"); } catch (e) {}
+    card.style.display = "none";
+  });
 }
 
 async function init(user) {
   DATA = await loadData();
+  document.getElementById("loadingState")?.remove();
   document.getElementById("adminMain").style.display = "block";
   const nameEl = document.getElementById("userName");
   if (nameEl && user) {
     const name = user.displayName || user.email || "Guru";
-    const initial = name.trim().charAt(0).toUpperCase();
-    nameEl.innerHTML = `<span style="width:22px;height:22px;border-radius:50%;background:#fff;color:var(--primary-dark);display:grid;place-items:center;font-size:11px;font-weight:800;flex:0 0 auto">${esc(initial)}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:110px">${esc(name)}</span>`;
+    nameEl.innerHTML = `${avatar({ name })}<span>${esc(name.split(/\s+/)[0])}</span>`;
+    nameEl.title = name + " — tekan untuk log keluar";
   }
-  if (isSuperAdmin(user)) {
-    const bar = document.querySelector("#adminMain .adminbar");
-    if (bar && !document.getElementById("superBanner")) {
-      const div = document.createElement("div");
-      div.id = "superBanner";
-      div.className = "card";
-      div.style.cssText = "margin-bottom:12px;border:2px solid var(--accent);background:#fffbeb;color:#78350d;font-weight:600";
-      div.textContent = "👑 Mod Superadmin — anda melihat murid SEMUA guru. Edit disimpan ke dokumen guru masing-masing.";
-      bar.before(div);
-    }
+  const acct = document.getElementById("acctInfo");
+  if (acct && user) acct.innerHTML = `${avatar({ name: user.displayName || user.email || "G" }, "lg")}<div style="min-width:0"><b style="display:block">${esc(user.displayName || "Guru")}</b><small class="muted" style="font-weight:600;word-break:break-all">${esc(user.email || "")}</small></div>`;
+  document.getElementById("programName").textContent = DATA.meta.programName;
+  if (isSuperAdmin(user) && !document.getElementById("superBanner")) {
+    const div = document.createElement("div");
+    div.id = "superBanner";
+    div.className = "banner warn";
+    div.style.marginTop = "0";
+    div.style.marginBottom = "12px";
+    div.innerHTML = `<span class="emo">👑</span><div><b>Mod Superadmin</b><small>Anda melihat murid SEMUA guru. Edit disimpan ke dokumen guru masing-masing.</small></div>`;
+    document.getElementById("viewMurid").prepend(div);
   }
   renderSettings();
   fillClassFilter();
   renderTable();
   wireAdmin();
-  const tBtn=document.getElementById("transferBtn");
+  hydrateIcons();
+  const tBtn = document.getElementById("transferBtn");
   if (tBtn) tBtn.style.display = isSuperAdmin(user) ? "" : "none";
   renderOnboarding();
   if (isSuperAdmin(user)) renderTeacherPanel();
+  if (location.hash === "#tetapan") setView("tetapan");
+  else if (location.hash === "#hadir") { setView("murid"); openAttendance(); }
 }
 
 async function renderTeacherPanel() {
@@ -1065,10 +1289,16 @@ async function renderTeacherPanel() {
   }
 }
 
+let initStarted = false;
 onAuthChange((user) => {
   if (!user) {
     window.location.href = "login.html";
     return;
   }
-  init(user);
+  if (initStarted) return;
+  initStarted = true;
+  init(user).catch(err => {
+    console.error(err);
+    sbmToast("Gagal memuatkan data: " + err.message);
+  });
 });

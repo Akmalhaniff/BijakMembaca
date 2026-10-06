@@ -132,13 +132,15 @@ export function sbmToast(msg) {
   if (!el) {
     el = document.createElement("div");
     el.id = "sbmToast";
-    el.style.cssText = "position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#b42318;color:#fff;padding:10px 16px;border-radius:10px;font:600 14px sans-serif;z-index:9999;box-shadow:0 6px 20px rgba(0,0,0,.25);max-width:90vw";
+    el.setAttribute("role", "status");
     document.body.appendChild(el);
   }
   el.textContent = msg;
+  el.style.display = "none";
+  void el.offsetWidth; // restart entrance animation
   el.style.display = "block";
   clearTimeout(el._t);
-  el._t = setTimeout(() => { el.style.display = "none"; }, 6000);
+  el._t = setTimeout(() => { el.style.display = "none"; }, 4000);
 }
 
 export async function saveData(data) {
